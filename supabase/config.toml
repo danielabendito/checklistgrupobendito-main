@@ -1,0 +1,19 @@
+project_id = "qwetfynfpfjruswdnaps"
+
+[functions.send-checklist-notifications]
+verify_jwt = false
+
+[functions.send-invite-email]
+verify_jwt = false
+
+[functions.send-invite-whatsapp]
+verify_jwt = false
+
+[functions.ai-inspection]
+verify_jwt = false
+
+[functions.send-whatsapp-report]
+verify_jwt = false
+
+[functions.test-whatsapp-send]
+verify_jwt = false
