@@ -67,27 +67,75 @@ export function StagingItemsConfirmation({ open, onOpenChange, storeId, onSucces
     try {
       const batchId = stagingItems[0].import_batch_id;
 
-      // Call function to import items
-      const { data, error } = await supabase.rpc('import_items_from_staging', {
-        p_batch_id: batchId
+      // Buscar todos os itens do batch com campos necessários
+      const { data: batchItems, error: fetchError } = await supabase
+        .from('checklist_items_staging')
+        .select('nome, checklist_type_id, ordem, requer_observacao, observacao_obrigatoria, requer_foto, store_id')
+        .eq('import_batch_id', batchId)
+        .eq('validation_status', 'valid');
+
+      if (fetchError) throw fetchError;
+      if (!batchItems || batchItems.length === 0) throw new Error('Nenhum item encontrado para importar');
+
+      // Calcular ordem máxima por checklist
+      const checklistIds = [...new Set(batchItems.map(i => i.checklist_type_id).filter(Boolean))];
+      const orderMap: Record<string, number> = {};
+
+      for (const ctId of checklistIds) {
+        const { data: maxData } = await supabase
+          .from('checklist_items')
+          .select('ordem')
+          .eq('checklist_type_id', ctId)
+          .order('ordem', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        orderMap[ctId] = (maxData?.ordem ?? 0);
+      }
+
+      // Montar itens para inserção
+      const itemsToInsert = batchItems.map(item => {
+        const ctId = item.checklist_type_id;
+        if (!item.ordem && ctId) {
+          orderMap[ctId] = (orderMap[ctId] ?? 0) + 10;
+        }
+        return {
+          checklist_type_id: ctId,
+          nome: item.nome,
+          ordem: item.ordem ?? (ctId ? orderMap[ctId] : 10),
+          requer_observacao: item.requer_observacao ?? false,
+          observacao_obrigatoria: item.observacao_obrigatoria ?? false,
+          requer_foto: item.requer_foto ?? false,
+          store_id: item.store_id,
+        };
       });
 
-      if (error) throw error;
+      // Inserir em checklist_items
+      const { error: insertError } = await supabase
+        .from('checklist_items')
+        .insert(itemsToInsert);
 
-      const result = data as { success: boolean; items_imported: number; checklists_affected: any[] };
+      if (insertError) throw insertError;
+
+      // Limpar staging
+      const { error: deleteError } = await supabase
+        .from('checklist_items_staging')
+        .delete()
+        .eq('import_batch_id', batchId);
+
+      if (deleteError) console.warn('Erro ao limpar staging (não crítico):', deleteError);
 
       toast({
         title: "Importação concluída!",
-        description: `${result.items_imported} itens importados com sucesso`
+        description: `${itemsToInsert.length} itens importados com sucesso`
       });
 
       onSuccess();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Import error:', error);
       toast({
         title: "Erro ao importar",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
+        description: error?.message || error?.details || JSON.stringify(error) || "Erro desconhecido",
         variant: "destructive"
       });
     } finally {

@@ -25,13 +25,48 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
   const [isImporting, setIsImporting] = useState(false);
 
   const loadChecklists = useCallback(async () => {
-    const { data } = await supabase
-      .from('checklist_types')
-      .select('id, nome')
-      .eq('store_id', storeId);
-    
-    if (data) setChecklists(data);
+    try {
+      // Usar o storeId do prop, mas se estiver vazio buscar do perfil do usuário
+      let effectiveStoreId = storeId;
+
+      if (!effectiveStoreId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('store_id')
+            .eq('id', user.id)
+            .maybeSingle();
+          effectiveStoreId = profile?.store_id || '';
+          console.log('[ImportDialog] storeId do prop estava vazio, buscou do perfil:', effectiveStoreId);
+        }
+      }
+
+      console.log('[ImportDialog] Buscando checklists para storeId:', effectiveStoreId);
+
+      const { data, error } = await supabase
+        .from('checklist_types')
+        .select('id, nome')
+        .eq('store_id', effectiveStoreId);
+
+      console.log('[ImportDialog] Checklists encontrados:', data?.length ?? 0, data?.map(c => c.nome));
+
+      if (error) {
+        console.error('[ImportDialog] Erro ao buscar checklists:', error);
+        return [];
+      }
+
+      if (data) {
+        setChecklists(data);
+        return data;
+      }
+      return [];
+    } catch (err) {
+      console.error('[ImportDialog] Exceção em loadChecklists:', err);
+      return [];
+    }
   }, [storeId]);
+
 
   const handleFileSelect = async (selectedFile: File) => {
     if (!selectedFile.name.endsWith('.xlsx')) {
@@ -56,9 +91,14 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
     setIsValidating(true);
 
     try {
-      await loadChecklists();
+      const currentChecklists = await loadChecklists();
       const rows = await parseExcelFile(selectedFile);
       
+      const { data: allExistingItems } = await supabase
+        .from('checklist_items')
+        .select('id, nome, checklist_type_id')
+        .in('checklist_type_id', currentChecklists.map(c => c.id));
+
       // Validate each row
       const results: ValidationResult[] = [];
       const seenItems = new Map<string, Set<string>>(); // checklist_id -> Set of item names
@@ -72,33 +112,43 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
           continue;
         }
 
+        // Normalize string to ignore spaces, cases, accents and punctuation when matching
+        const normalizeForMatch = (str: string) => {
+          if (!str) return '';
+          return str.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove acentos
+            .replace(/[^a-z0-9]/g, ""); // Remove tudo que não for letra ou número
+        };
+
         // Check if checklist exists
-        const checklist = checklists.find(
-          c => c.nome.toLowerCase().trim() === row.checklist_nome.toLowerCase().trim()
+        const checklist = currentChecklists.find(
+          c => normalizeForMatch(c.nome) === normalizeForMatch(row.checklist_nome)
         );
 
         if (!checklist) {
+          const disponiveis = currentChecklists.map(c => c.nome).join(', ');
+          console.warn(`[ImportDialog] Checklist não encontrado. Buscando: "${row.checklist_nome}". Disponíveis (${currentChecklists.length}): ${disponiveis}`);
           results.push({
             ...validationResult,
             status: 'error',
-            message: `Checklist "${row.checklist_nome}" não encontrado`
+            message: currentChecklists.length === 0
+              ? `Nenhum checklist carregado — verifique se a loja está selecionada corretamente`
+              : `Checklist "${row.checklist_nome}" não encontrado. Disponíveis: ${disponiveis}`
           });
           continue;
         }
 
-        // Check for duplicates in database
-        const { data: existingItem } = await supabase
-          .from('checklist_items')
-          .select('id')
-          .eq('checklist_type_id', checklist.id)
-          .ilike('nome', row.nome)
-          .maybeSingle();
+        // Check for duplicates in database using the pre-fetched items
+        const duplicateInDb = allExistingItems?.find(
+          item => item.checklist_type_id === checklist.id && 
+                  item.nome.toLowerCase().trim() === String(row.nome).toLowerCase().trim()
+        );
 
-        if (existingItem) {
+        if (duplicateInDb) {
           results.push({
             ...validationResult,
             status: 'error',
-            message: `Item "${row.nome}" já existe no checklist "${row.checklist_nome}"`
+            message: `Item "${row.nome}" já existe no banco de dados`
           });
           continue;
         }
@@ -125,15 +175,18 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
         // All validations passed
         results.push({
           ...validationResult,
-          data: { ...validationResult.data, checklist_nome: checklist.nome }
+          data: { ...validationResult.data, checklist_nome: checklist.nome } as any
         });
+        // Save the correct checklist ID to be used later
+        (results[results.length - 1] as any).checklist_id_resolved = checklist.id;
       }
 
       setValidationResults(results);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('File parsing error:', error);
       toast({
         title: "Erro ao processar arquivo",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
+        description: error?.message || error?.details || "Erro desconhecido",
         variant: "destructive"
       });
       setFile(null);
@@ -167,17 +220,13 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
       const stagingItems = await Promise.all(
         validationResults
           .filter(r => r.status !== 'error')
-          .map(async (result) => {
-            const checklist = checklists.find(
-              c => c.nome.toLowerCase() === result.data.checklist_nome.toLowerCase()
-            );
-
+          .map(async (result: any) => {
             return {
               store_id: storeId,
               imported_by: user.id,
               nome: result.data.nome,
               checklist_nome: result.data.checklist_nome,
-              checklist_type_id: checklist?.id,
+              checklist_type_id: result.checklist_id_resolved,
               ordem: result.data.ordem || null,
               requer_observacao: result.data.requer_observacao || false,
               observacao_obrigatoria: result.data.observacao_obrigatoria || false,
@@ -202,11 +251,11 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
       onSuccess();
       onOpenChange(false);
       resetDialog();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Import error:', error);
       toast({
         title: "Erro ao importar",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
+        description: error?.message || error?.details || "Erro desconhecido ao comunicar com o banco de dados",
         variant: "destructive"
       });
     } finally {
@@ -247,8 +296,8 @@ export function ImportItemsDialog({ open, onOpenChange, storeId, onSuccess }: Im
                 variant="outline"
                 size="sm"
                 onClick={async () => {
-                  await loadChecklists();
-                  downloadTemplate(checklists);
+                  const data = await loadChecklists();
+                  downloadTemplate(data);
                 }}
               >
                 <Download className="mr-2 h-4 w-4" />
