@@ -308,22 +308,36 @@ export function EmailInvitesTab() {
 
           if (roleError) throw roleError;
 
-          // Criar convite marcado como usado
-          const { error: inviteError } = await supabase
+          // Marcar convite existente como usado ou criar um novo
+          const { data: existingInvite } = await supabase
             .from("email_invites")
-            .insert({ 
-              email: normalizedEmail,
-              role: newRole as UserRole,
-              store_id: currentStore.id,
-              invited_by: (await supabase.auth.getUser()).data.user?.id,
-              whatsapp_number: cleanWhatsApp || null,
-              invite_type: 'email',
-              invitee_name: newName.trim() || null,
-              used: true, 
-              used_at: new Date().toISOString() 
-            });
+            .select("id")
+            .eq("email", normalizedEmail)
+            .maybeSingle();
 
-          if (inviteError && inviteError.code !== '23505') throw inviteError;
+          if (existingInvite) {
+            const { error: updateInviteError } = await supabase
+              .from("email_invites")
+              .update({ used: true, used_at: new Date().toISOString() })
+              .eq("id", existingInvite.id);
+            if (updateInviteError) throw updateInviteError;
+          } else {
+            const { error: inviteError } = await supabase
+              .from("email_invites")
+              .insert({ 
+                email: normalizedEmail,
+                role: newRole as UserRole,
+                store_id: currentStore.id,
+                invited_by: (await supabase.auth.getUser()).data.user?.id,
+                whatsapp_number: cleanWhatsApp || null,
+                invite_type: 'email',
+                invitee_name: newName.trim() || null,
+                used: true, 
+                used_at: new Date().toISOString() 
+              });
+
+            if (inviteError && inviteError.code !== '23505') throw inviteError;
+          }
 
           toast({
             title: "✅ Usuário movido com sucesso",
