@@ -1,0 +1,4 @@
+id;notification_email;created_at;updated_at;notification_time_manha;notification_time_tarde;notification_time_noite;store_id;notification_channel_email;notification_channel_whatsapp;notification_whatsapp_number;notification_whatsapp_numbers
+26bb2046-c296-4e75-91d4-1de403515494;daniela.bendito@gmail.com;2025-10-31 18:31:12.669559+00;2026-03-11 15:00:29.190619+00;14:30:00;20:25:00;02:59:00;9cc8182f-5502-4416-a701-05665a56088f;false;true;5548996161451;"[""5548996161451""]"
+060c9778-5ffb-47ad-922b-dc8fbba029bd;daniela.bendito@gmail.com;2025-10-31 18:32:09.441819+00;2026-03-11 15:00:29.190619+00;14:10:00;20:25:00;02:59:00;ee15ca04-eb0b-4d53-96b4-b45b7e1c42f9;false;true;5548996161451;"[""5548996161451""]"
+d91dffd2-f799-47cf-bc4c-7ae171dded75;daniela.bendito@gmail.com;2025-10-31 17:18:03.761535+00;2026-03-11 15:04:51.621827+00;14:10:00;20:25:00;02:59:00;d2118d7f-a6d2-4cea-a077-3d93a0cb5663;false;true;5548996161451;"[""5548996161451"",""5548999697669""]"
