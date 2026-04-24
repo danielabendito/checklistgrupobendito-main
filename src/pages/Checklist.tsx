@@ -76,6 +76,14 @@ const Checklist = () => {
   const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
   const [cameraOpenFor, setCameraOpenFor] = useState<string | null>(null);
   const [checklistDate, setChecklistDate] = useState<string>(getBrasiliaDateString());
+  const [showCompletionScreen, setShowCompletionScreen] = useState(false);
+  const [completionSummary, setCompletionSummary] = useState<{
+    ok: number;
+    nok: number;
+    total: number;
+    photos: number;
+  } | null>(null);
+  const [streakDays, setStreakDays] = useState(0);
   
   // Ref to track pending saves
   const pendingSaveRef = useRef<Set<string>>(new Set());
@@ -598,6 +606,42 @@ const Checklist = () => {
     }
   };
 
+  const calculateStreak = async (): Promise<number> => {
+    if (!user || !currentStore) return 1;
+    try {
+      const { data } = await supabase
+        .from("checklist_responses")
+        .select("data")
+        .eq("user_id", user.id)
+        .eq("store_id", currentStore.id)
+        .not("completed_at", "is", null)
+        .order("data", { ascending: false });
+
+      if (!data || data.length === 0) return 1;
+
+      const uniqueDates = [...new Set(data.map(r => r.data as string))].sort((a, b) => b.localeCompare(a));
+      let streak = 0;
+      let checkDate = getBrasiliaDateString();
+
+      for (const date of uniqueDates) {
+        if (date === checkDate) {
+          streak++;
+          const [y, m, d] = checkDate.split('-').map(Number);
+          const prev = new Date(y, m - 1, d - 1);
+          const py = prev.getFullYear();
+          const pm = String(prev.getMonth() + 1).padStart(2, '0');
+          const pd = String(prev.getDate()).padStart(2, '0');
+          checkDate = `${py}-${pm}-${pd}`;
+        } else {
+          break;
+        }
+      }
+      return Math.max(streak, 1);
+    } catch {
+      return 1;
+    }
+  };
+
   const handleSave = async () => {
     try {
       // Validate that items requiring photos have them
@@ -716,8 +760,19 @@ const Checklist = () => {
         setInspecting(false);
       }
 
-      // Reload responses
-      await loadChecklistData();
+      // Calcular streak e mostrar tela de conclusão
+      const streak = await calculateStreak();
+      setStreakDays(streak);
+      const finalOk = Object.values(responses).filter(r => r.status === 'ok').length;
+      const finalNok = Object.values(responses).filter(r => r.status === 'nok').length;
+      const finalPhotos = Object.values(responses).filter(r => r.photo_url !== null).length;
+      setCompletionSummary({
+        ok: finalOk,
+        nok: finalNok,
+        total: items.length,
+        photos: finalPhotos,
+      });
+      setShowCompletionScreen(true);
 
     } catch (error: any) {
       toast({
@@ -741,6 +796,66 @@ const Checklist = () => {
 
   if (!checklist) {
     return null;
+  }
+
+  // Tela de conclusão após finalizar
+  if (showCompletionScreen && completionSummary) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-success/10 flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-28 h-28 rounded-full bg-success/10 border-4 border-success flex items-center justify-center mb-8 animate-pulse">
+          <CheckCircle2 className="h-14 w-14 text-success" />
+        </div>
+        <h1 className="text-3xl font-bold mb-2">🎉 Checklist Concluído!</h1>
+        <p className="text-muted-foreground text-lg mb-8">{checklist.nome}</p>
+
+        <Card className="w-full max-w-sm mb-6 border-success/20 bg-success/5">
+          <CardContent className="pt-6 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-2 text-success font-medium">
+                <CheckCircle2 className="h-4 w-4" /> Itens OK
+              </span>
+              <span className="font-bold text-xl">{completionSummary.ok}/{completionSummary.total}</span>
+            </div>
+            {completionSummary.nok > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2 text-destructive font-medium">
+                  <XCircle className="h-4 w-4" /> Itens NOK
+                </span>
+                <span className="font-bold text-xl text-destructive">{completionSummary.nok}</span>
+              </div>
+            )}
+            {completionSummary.photos > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2 text-primary font-medium">
+                  <Camera className="h-4 w-4" /> Fotos enviadas
+                </span>
+                <span className="font-bold text-xl">{completionSummary.photos}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {streakDays >= 2 ? (
+          <div className="mb-8 px-6 py-4 bg-orange-500/10 rounded-2xl border border-orange-500/20 w-full max-w-sm">
+            <p className="text-orange-500 font-bold text-xl">🔥 {streakDays} dias seguidos!</p>
+            <p className="text-sm text-muted-foreground mt-1">Continue assim, você está arrasando!</p>
+          </div>
+        ) : (
+          <div className="mb-8 px-6 py-4 bg-primary/10 rounded-2xl border border-primary/20 w-full max-w-sm">
+            <p className="text-primary font-semibold text-lg">🌟 Excelente trabalho!</p>
+            <p className="text-sm text-muted-foreground mt-1">Volte amanhã para iniciar uma sequência!</p>
+          </div>
+        )}
+
+        <Button
+          size="lg"
+          className="w-full max-w-sm h-14 text-base"
+          onClick={() => navigate('/')}
+        >
+          Voltar ao Dashboard
+        </Button>
+      </div>
+    );
   }
 
   const stats = {
@@ -842,6 +957,22 @@ const Checklist = () => {
             )}
           </div>
 
+          {/* Barra de progresso */}
+          {stats.total > 0 && (
+            <div className="mt-3">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                <span>{stats.ok + stats.nok} de {stats.total} itens respondidos</span>
+                <span className="font-semibold">{Math.round(((stats.ok + stats.nok) / stats.total) * 100)}%</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full bg-success rounded-full transition-all duration-500"
+                  style={{ width: `${((stats.ok + stats.nok) / stats.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {itemsWithoutPhotos > 0 && (
             <Alert variant="destructive" className="mt-4">
               <AlertCircle className="h-4 w-4" />
@@ -879,7 +1010,10 @@ const Checklist = () => {
             const status = response?.status || 'pendente';
 
             return (
-              <Card key={item.id}>
+              <Card key={item.id} className={`transition-all duration-300 ${
+                  status === 'ok' ? 'border-l-4 border-l-success bg-success/5' :
+                  status === 'nok' ? 'border-l-4 border-l-destructive bg-destructive/5' : ''
+                }`}>
                 <CardHeader>
                   <div className="flex items-start gap-4">
                     <Badge variant="outline" className="shrink-0">
@@ -889,23 +1023,29 @@ const Checklist = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <Button
                       variant={status === 'ok' ? 'default' : 'outline'}
-                      size="sm"
                       onClick={() => handleStatusChange(item.id, 'ok')}
-                      className={status === 'ok' ? 'bg-success hover:bg-success/90' : ''}
+                      className={`h-14 text-base font-semibold transition-all duration-200 ${
+                        status === 'ok'
+                          ? 'bg-success hover:bg-success/90 text-white shadow-md shadow-success/20'
+                          : 'hover:bg-success/10 hover:text-success hover:border-success/50'
+                      }`}
                     >
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      <CheckCircle2 className="h-5 w-5 mr-2" />
                       OK
                     </Button>
                     <Button
                       variant={status === 'nok' ? 'default' : 'outline'}
-                      size="sm"
                       onClick={() => handleStatusChange(item.id, 'nok')}
-                      className={status === 'nok' ? 'bg-destructive hover:bg-destructive/90' : ''}
+                      className={`h-14 text-base font-semibold transition-all duration-200 ${
+                        status === 'nok'
+                          ? 'bg-destructive hover:bg-destructive/90 text-white shadow-md shadow-destructive/20'
+                          : 'hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50'
+                      }`}
                     >
-                      <XCircle className="h-4 w-4 mr-2" />
+                      <XCircle className="h-5 w-5 mr-2" />
                       NOK
                     </Button>
                   </div>
