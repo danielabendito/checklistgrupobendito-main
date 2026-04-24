@@ -15,32 +15,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
 const dataDir = 'd:/Antigravity/checklistgrupobendito-main/dados_migracao';
 const DEFAULT_PASSWORD = 'bendito';
 
-// Columns that might contain user UUIDs that need mapping
-const userUuidColumns = ['id', 'user_id', 'owner_id', 'invited_by', 'executed_by'];
-
-// We must respect foreign key dependency order
-const tableOrder = [
-  'organizations',
-  'stores',
-  // profiles are handled separately first
-  'roles',
-  'user_roles',
-  'checklist_types',
-  'checklist_items',
-  'admin_settings',
-  'inspection_standards',
-  'checklist_responses',
-  'inspection_reports',
-  'inspection_report_items',
-  'audit_logs',
-  'email_invites',
-  'checklist_notifications',
-  'notifications'
-];
-
 async function readCsv(filePath) {
   return new Promise((resolve, reject) => {
     const results = [];
+    if (!fs.existsSync(filePath)) return resolve([]);
     fs.createReadStream(filePath)
       .pipe(csv({ separator: ';' }))
       .on('data', (data) => results.push(data))
@@ -53,128 +31,112 @@ function findLatestExport(tableName) {
   const files = fs.readdirSync(dataDir);
   const matchingFiles = files.filter(f => f.startsWith(`${tableName}-export-`) && f.endsWith('.csv'));
   if (matchingFiles.length === 0) return null;
-  // Sort descending by name to get the latest
   matchingFiles.sort().reverse();
   return path.join(dataDir, matchingFiles[0]);
 }
 
 async function migrate() {
-  console.log('--- Starting Data Migration ---');
+  console.log('--- Starting Data Migration (V3 - Final) ---');
   
-  const profilesFile = findLatestExport('profiles');
-  if (!profilesFile) {
-    console.error('profiles CSV not found!');
-    return;
-  }
-
-  console.log('Reading profiles to create auth users...');
-  const profilesData = await readCsv(profilesFile);
-  const uuidMap = {}; // Maps old user_id to new auth.users id
-
-  for (const profile of profilesData) {
-    const oldId = profile.id;
-    let email = profile.email;
-    
-    if (!email) {
-       console.log(`Profile ${oldId} has no email, creating fake email.`);
-       email = `${oldId}@fake.grupobendito.com`;
-    }
-
-    try {
-      // Create user in auth.users
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: email,
-        password: DEFAULT_PASSWORD,
-        email_confirm: true,
-        user_metadata: { nome: profile.nome, role: profile.role }
-      });
-
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-            // Fetch the user to get their new ID
-            const { data: existingUsers } = await supabase.auth.admin.listUsers();
-            const existingUser = existingUsers.users.find(u => u.email === email);
-            if (existingUser) {
-                uuidMap[oldId] = existingUser.id;
-                console.log(`User ${email} already existed, mapped ${oldId} -> ${existingUser.id}`);
-            }
-        } else {
-            console.error(`Error creating user ${email}:`, authError.message);
-        }
-      } else if (authData.user) {
-        uuidMap[oldId] = authData.user.id;
-        console.log(`Created user ${email}, mapped ${oldId} -> ${authData.user.id}`);
-      }
-    } catch (e) {
-      console.error(`Exception creating user ${email}:`, e);
-    }
-  }
-
-  console.log(`\nSuccessfully mapped ${Object.keys(uuidMap).length} users.`);
-
-  // Now process the tables in order
-  // We add 'profiles' to the front so it's upserted first to populate names/etc correctly after trigger fires
-  const tablesToProcess = ['profiles', ...tableOrder];
-
-  for (const tableName of tablesToProcess) {
+  // 1. Organizations & Stores
+  for (const tableName of ['organizations', 'stores']) {
     const file = findLatestExport(tableName);
-    if (!file) {
-      console.log(`Skipping ${tableName} - no CSV found.`);
-      continue;
-    }
-
-    console.log(`\nProcessing ${tableName}...`);
-    let records = await readCsv(file);
-    console.log(`Found ${records.length} records.`);
-
-    // Map UUIDs and prepare batch
-    const mappedRecords = [];
-    for (const record of records) {
-      const newRecord = { ...record };
-      
-      // Map user UUIDs
-      for (const col of userUuidColumns) {
-        if (newRecord[col] && uuidMap[newRecord[col]]) {
-          newRecord[col] = uuidMap[newRecord[col]];
+    if (!file) continue;
+    const records = await readCsv(file);
+    const clean = records.map(r => {
+      const nr = { ...r };
+      for (const k in nr) {
+        if (nr[k] === '') nr[k] = null;
+        if (typeof nr[k] === 'string' && nr[k].startsWith('[') && nr[k].endsWith(']')) {
+          try { nr[k] = JSON.parse(nr[k]); } catch(e) {}
         }
       }
-
-      // Convert empty strings to null for UUIDs or timestamps to prevent validation errors
-      for (const key of Object.keys(newRecord)) {
-         if (newRecord[key] === '') {
-             newRecord[key] = null;
-         }
-      }
-
-      mappedRecords.push(newRecord);
-    }
-
-    // Upsert in batches of 500
-    const batchSize = 500;
-    let successCount = 0;
-    
-    for (let i = 0; i < mappedRecords.length; i += batchSize) {
-      const batch = mappedRecords.slice(i, i + batchSize);
-      
-      // Determine onConflict column(s) for upsert
-      let onConflict = 'id';
-      if (tableName === 'user_roles') onConflict = 'user_id, role';
-      
-      const { data, error } = await supabase.from(tableName).upsert(batch, { onConflict });
-      
-      if (error) {
-        console.error(`Error upserting batch in ${tableName}:`, error.message);
-        console.error('First record of failing batch:', batch[0]);
-        // Don't break, keep trying other batches
-      } else {
-        successCount += batch.length;
-        process.stdout.write(`\rInserted ${successCount}/${mappedRecords.length}`);
-      }
-    }
-    console.log(`\nFinished ${tableName}.`);
+      return nr;
+    });
+    console.log(`Upserting ${clean.length} to ${tableName}...`);
+    const { error } = await supabase.from(tableName).upsert(clean, { onConflict: 'id' });
+    if (error) { console.error(`Error ${tableName}:`, error.message); return; }
   }
 
-  console.log('\n--- Migration Complete ---');
+  // 2. Setup mapping and users
+  const profilesFile = findLatestExport('profiles');
+  const profilesData = await readCsv(profilesFile);
+  console.log(`Loaded ${profilesData.length} profiles from CSV.`);
+  
+  const uuidMap = {};
+  const { data: storeData } = await supabase.from('stores').select('id').limit(1);
+  const defaultStoreId = storeData?.[0]?.id;
+
+  if (!defaultStoreId) { console.error('No stores available!'); return; }
+
+  console.log('Creating bypass invites...');
+  const invites = profilesData.map(p => ({
+    email: p.email || `${p.id}@fake.bendito.com`,
+    store_id: p.store_id || defaultStoreId,
+    role: 'atendente',
+    used: false
+  }));
+  
+  const { error: invErr } = await supabase.from('email_invites').upsert(invites, { onConflict: 'email' });
+  if (invErr) console.warn('Invite bypass warning (continuing):', invErr.message);
+
+  console.log('Syncing users with Auth...');
+  for (const p of profilesData) {
+    const email = p.email || `${p.id}@fake.bendito.com`;
+    const { data: ud, error: ue } = await supabase.auth.admin.createUser({
+      email, password: DEFAULT_PASSWORD, email_confirm: true
+    });
+
+    if (ud?.user) uuidMap[p.id] = ud.user.id;
+    else if (ue?.message.includes('already registered')) {
+      const { data: ul } = await supabase.auth.admin.listUsers();
+      const u = ul.users.find(u => u.email === email);
+      if (u) uuidMap[p.id] = u.id;
+    } else {
+      console.error(`Auth error for ${email}:`, ue?.message);
+    }
+  }
+
+  console.log(`Mapped ${Object.keys(uuidMap).length} users.`);
+
+  // 3. Profiles
+  const mappedProfiles = profilesData.map(p => {
+    const nr = { ...p };
+    if (uuidMap[p.id]) nr.id = uuidMap[p.id];
+    for (const k in nr) if (nr[k] === '') nr[k] = null;
+    return nr;
+  });
+  await supabase.from('profiles').upsert(mappedProfiles, { onConflict: 'id' });
+
+  // 4. Remaining data
+  const tables = ['user_roles', 'checklist_types', 'checklist_items', 'checklist_responses', 'inspection_standards', 'inspection_reports', 'inspection_report_items', 'notifications'];
+  const userCols = ['id', 'user_id', 'owner_id', 'invited_by', 'executed_by'];
+
+  for (const table of tables) {
+    const file = findLatestExport(table);
+    if (!file) continue;
+    const records = await readCsv(file);
+    const mapped = records.map(r => {
+      const nr = { ...r };
+      for (const col of userCols) if (nr[col] && uuidMap[nr[col]]) nr[col] = uuidMap[nr[col]];
+      for (const k in nr) {
+        if (nr[k] === '') nr[k] = null;
+        if (typeof nr[k] === 'string' && nr[k].startsWith('[') && nr[k].endsWith(']')) {
+          try { nr[k] = JSON.parse(nr[k]); } catch(e) {}
+        }
+      }
+      return nr;
+    });
+
+    for (let i = 0; i < mapped.length; i += 500) {
+      let onConflict = 'id';
+      if (table === 'user_roles') onConflict = 'user_id, role';
+      const { error } = await supabase.from(table).upsert(mapped.slice(i, i + 500), { onConflict });
+      if (error) console.error(`Error in ${table}:`, error.message);
+    }
+    console.log(`Finished ${table} (${mapped.length} rows).`);
+  }
+  console.log('--- Migration Done ---');
 }
 
 migrate();
