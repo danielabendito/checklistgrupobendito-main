@@ -77,8 +77,13 @@ async function migrate() {
     used: false
   }));
   
-  const { error: invErr } = await supabase.from('email_invites').upsert(invites, { onConflict: 'email' });
-  if (invErr) console.warn('Invite bypass warning (continuing):', invErr.message);
+  for (let i = 0; i < invites.length; i += 500) {
+    const { error: invErr } = await supabase.from('email_invites').insert(invites.slice(i, i + 500));
+    if (invErr && !invErr.message.includes('already exists') && !invErr.message.includes('unique constraint')) {
+      console.warn('Invite bypass warning:', invErr.message);
+    }
+  }
+  console.log('Bypass invites ready.');
 
   console.log('Syncing users with Auth...');
   for (const p of profilesData) {
