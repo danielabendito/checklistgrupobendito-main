@@ -53,9 +53,11 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
   const { toast } = useToast();
   const { currentStore } = useStore();
   const [loading, setLoading] = useState(false);
+  const [loadingOrdem, setLoadingOrdem] = useState(false);
   const [nome, setNome] = useState("");
   const [checklistTypeId, setChecklistTypeId] = useState("");
   const [ordem, setOrdem] = useState("");
+  const [ordemAutoFilled, setOrdemAutoFilled] = useState(false);
   const [requerObservacao, setRequerObservacao] = useState(false);
   const [observacaoObrigatoria, setObservacaoObrigatoria] = useState(false);
   const [requerFoto, setRequerFoto] = useState(false);
@@ -65,6 +67,7 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
       setNome(item.nome);
       setChecklistTypeId(item.checklist_type_id);
       setOrdem(item.ordem.toString());
+      setOrdemAutoFilled(false);
       setRequerObservacao(item.requer_observacao);
       setObservacaoObrigatoria(item.observacao_obrigatoria);
       setRequerFoto(item.requer_foto);
@@ -72,11 +75,39 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
       setNome("");
       setChecklistTypeId("");
       setOrdem("");
+      setOrdemAutoFilled(false);
       setRequerObservacao(false);
       setObservacaoObrigatoria(false);
       setRequerFoto(false);
     }
   }, [item, open]);
+
+  // Auto-numeração: busca o maior ordem do checklist selecionado
+  useEffect(() => {
+    if (!checklistTypeId || item) return; // Não auto-preenche ao editar
+
+    const fetchNextOrdem = async () => {
+      setLoadingOrdem(true);
+      try {
+        const { data } = await supabase
+          .from("checklist_items")
+          .select("ordem")
+          .eq("checklist_type_id", checklistTypeId)
+          .order("ordem", { ascending: false })
+          .limit(1);
+
+        const maxOrdem = data?.[0]?.ordem ?? 0;
+        setOrdem((maxOrdem + 1).toString());
+        setOrdemAutoFilled(true);
+      } catch {
+        // Silently fail, user can type manually
+      } finally {
+        setLoadingOrdem(false);
+      }
+    };
+
+    fetchNextOrdem();
+  }, [checklistTypeId, item]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,7 +214,14 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="checklist">Checklist *</Label>
-            <Select value={checklistTypeId} onValueChange={setChecklistTypeId} required>
+            <Select
+              value={checklistTypeId}
+              onValueChange={(val) => {
+                setChecklistTypeId(val);
+                setOrdemAutoFilled(false); // Reseta flag ao trocar checklist
+              }}
+              required
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o checklist" />
               </SelectTrigger>
@@ -198,14 +236,25 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ordem">Ordem *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="ordem">Ordem</Label>
+              {ordemAutoFilled && (
+                <span className="text-xs text-muted-foreground">
+                  ✓ Preenchido automaticamente
+                </span>
+              )}
+            </div>
             <Input
               id="ordem"
               type="number"
               min="1"
               value={ordem}
-              onChange={(e) => setOrdem(e.target.value)}
-              placeholder="Ex: 1"
+              onChange={(e) => {
+                setOrdem(e.target.value);
+                setOrdemAutoFilled(false);
+              }}
+              placeholder={loadingOrdem ? "Calculando..." : "Ex: 1"}
+              disabled={loadingOrdem}
               required
             />
           </div>
