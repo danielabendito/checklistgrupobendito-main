@@ -973,7 +973,7 @@ const Checklist = () => {
             </div>
           )}
 
-          {itemsWithoutPhotos > 0 && (
+          {itemsWithoutPhotos > 0 && (stats.ok + stats.nok) > 0 && (
             <Alert variant="destructive" className="mt-4">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Checklist não realizado</AlertTitle>
