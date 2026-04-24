@@ -1,4 +1,4 @@
-import { Plus, Edit, Trash2, Upload, Download, Package } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download, Package, ListOrdered } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +58,7 @@ interface ChecklistManagementTabProps {
   onSetStagingConfirmOpen: (open: boolean) => void;
   onToggleItemSelection: (itemId: string) => void;
   onToggleAllItems: (checklistId: string) => void;
+  onFixAllOrder: () => void;
 }
 
 export const ChecklistManagementTab = ({
@@ -79,6 +80,7 @@ export const ChecklistManagementTab = ({
   onSetStagingConfirmOpen,
   onToggleItemSelection,
   onToggleAllItems,
+  onFixAllOrder,
 }: ChecklistManagementTabProps) => {
   const { currentStore } = useStore();
   const { toast } = useToast();
@@ -222,6 +224,14 @@ export const ChecklistManagementTab = ({
                 Revisar Importação ({stagingCount})
               </Button>
             )}
+            <Button 
+              variant="outline"
+              onClick={() => onFixAllOrder()}
+              disabled={items.length === 0}
+            >
+              <ListOrdered className="h-4 w-4 mr-2" />
+              Reorganizar Numeração
+            </Button>
             <Button onClick={() => {
               onSetSelectedItem(null);
               onSetItemDialogOpen(true);
