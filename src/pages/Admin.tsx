@@ -22,6 +22,7 @@ import { ImportItemsDialog } from "@/components/admin/ImportItemsDialog";
 import { StagingItemsConfirmation } from "@/components/admin/StagingItemsConfirmation";
 import { GettingStartedTab } from "@/components/admin/GettingStartedTab";
 import { WhatsAppRecipientsCard } from "@/components/admin/WhatsAppRecipientsCard";
+import { RewardSettingsTab } from "@/components/admin/RewardSettingsTab";
 
 // New consolidated tab components
 import { InspectionTab } from "@/components/admin/InspectionTab";
@@ -517,6 +518,7 @@ const Admin = () => {
             <TabsTrigger value="inspection">🔬 Inspeção</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
             <TabsTrigger value="team">👥 Equipe</TabsTrigger>
+            <TabsTrigger value="rewards">🎁 Prêmios</TabsTrigger>
             <TabsTrigger value="checklists-items">📝 Checklists/Itens</TabsTrigger>
             {profile?.role === 'super_admin' && (
               <TabsTrigger value="my-stores">🏪 Minhas Lojas</TabsTrigger>
@@ -546,8 +548,12 @@ const Admin = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="team">
+          <TabsContent value="team" className="space-y-4">
             <TeamManagementTab />
+          </TabsContent>
+
+          <TabsContent value="rewards" className="space-y-4">
+            <RewardSettingsTab />
           </TabsContent>
 
           <TabsContent value="checklists-items">
