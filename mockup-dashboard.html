@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mockup — Dashboard Redesign</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { DEFAULT: '#7c3aed', foreground: '#fff' },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+    body { background: #f8f7ff; margin: 0; }
+
+    /* Circular progress ring */
+    .ring-container { position: relative; width: 88px; height: 88px; }
+    .ring-container svg { transform: rotate(-90deg); }
+    .ring-bg { fill: none; stroke: #e9d5ff; stroke-width: 8; }
+    .ring-fill { fill: none; stroke: #7c3aed; stroke-width: 8; stroke-linecap: round;
+      stroke-dasharray: 226; stroke-dashoffset: 45; transition: stroke-dashoffset 1s ease; }
+    .ring-center { position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; flex-direction: column; }
+
+    /* Shimmer cards */
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04); }
+
+    /* Area stripe */
+    .area-loja   { border-left: 4px solid #7c3aed; }
+    .area-cozinha{ border-left: 4px solid #0ea5e9; }
+    .area-bar    { border-left: 4px solid #f59e0b; }
+
+    /* Checklist card hover */
+    .checklist-card { transition: transform .2s, box-shadow .2s; cursor: pointer; }
+    .checklist-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(124,58,237,.15); }
+
+    /* Badge */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px;
+      border-radius: 9999px; font-size: 12px; font-weight: 600; }
+    .badge-loja    { background: #ede9fe; color: #6d28d9; }
+    .badge-cozinha { background: #e0f2fe; color: #0369a1; }
+    .badge-bar     { background: #fef3c7; color: #b45309; }
+    .badge-outline { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
+    .badge-role    { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+
+    /* Progress bar */
+    .progress-bar { height: 6px; background: #ede9fe; border-radius: 9999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg,#7c3aed,#a78bfa); border-radius: 9999px; transition: width 1s ease; }
+
+    /* Avatar */
+    .avatar { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg,#7c3aed,#a78bfa);
+      display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px; }
+
+    .icon-btn { width: 38px; height: 38px; border-radius: 10px; border: 1.5px solid #e5e7eb;
+      background: #fff; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #6b7280; transition: background .15s, border-color .15s; }
+    .icon-btn:hover { background: #f5f3ff; border-color: #c4b5fd; color: #7c3aed; }
+
+    .stat-box { border-radius: 14px; padding: 18px 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  </style>
+</head>
+<body>
+
+<!-- ─────────────────── HEADER ─────────────────── -->
+<header style="background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-bottom:1px solid #ede9fe;position:sticky;top:0;z-index:20;">
+  <div style="max-width:1100px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+
+    <!-- Left: Logo + identity -->
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:42px;height:42px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:13px;
+                  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(124,58,237,.3);">
+        <!-- chef hat SVG -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
+          <line x1="6" y1="17" x2="18" y2="17"/>
+        </svg>
+      </div>
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#18181b;line-height:1.2;">Gestão de Checklists</div>
+        <div style="font-size:12px;color:#7c3aed;font-weight:500;">Boa tarde, Maria ☀️</div>
+      </div>
+    </div>
+
+    <!-- Right: User + actions -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+
+      <!-- Store selector -->
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 14px;border:1.5px solid #e5e7eb;border-radius:10px;background:#fff;cursor:pointer;font-size:13px;font-weight:500;color:#374151;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Unidade Centro
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+
+      <!-- User avatar + role -->
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border:1.5px solid #ede9fe;border-radius:11px;background:#faf5ff;cursor:pointer;">
+        <div class="avatar" style="width:32px;height:32px;border-radius:9px;font-size:13px;">MS</div>
+        <div style="line-height:1.15;">
+          <div style="font-size:12px;font-weight:600;color:#18181b;">Maria Silva</div>
+          <div style="font-size:11px;color:#7c3aed;font-weight:500;">Gerente</div>
+        </div>
+      </div>
+
+      <!-- Admin -->
+      <div class="icon-btn" title="Administração">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+      </div>
+
+      <!-- Notification bell with badge -->
+      <div class="icon-btn" style="position:relative;" title="Notificações">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span style="position:absolute;top:5px;right:5px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid #fff;"></span>
+      </div>
+
+      <!-- Logout -->
+      <div class="icon-btn" title="Sair">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ─────────────────── MAIN ─────────────────── -->
+<main style="max-width:1100px;margin:0 auto;padding:32px 24px;display:flex;flex-direction:column;gap:28px;">
+
+  <!-- ── USER STATS CARD ── -->
+  <div class="card" style="padding:28px;background:linear-gradient(135deg,#faf5ff 0%,#fff 60%,#f0fdf4 100%);border:1.5px solid #ede9fe;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#18181b;display:flex;align-items:center;gap:8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Seu Desempenho
+        </div>
+        <div style="font-size:13px;color:#6b7280;margin-top:2px;">Abril de 2026</div>
+      </div>
+      <!-- Motivational tag based on ok rate -->
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:9999px;font-size:13px;font-weight:600;color:#16a34a;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Excelente este mês!
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+
+      <!-- Stat 1: Checklists Realizados -->
+      <div class="stat-box" style="background:#f5f3ff;border:1.5px solid #ddd6fe;">
+        <!-- Circular ring -->
+        <div class="ring-container">
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle class="ring-bg" cx="44" cy="44" r="36"/>
+            <circle class="ring-fill" cx="44" cy="44" r="36" style="stroke:#7c3aed;stroke-dashoffset:67;"/>
+          </svg>
+          <div class="ring-center">
+            <span style="font-size:22px;font-weight:800;color:#6d28d9;line-height:1;">14</span>
+            <span style="font-size:9px;color:#8b5cf6;font-weight:600;">este mês</span>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#6d28d9;text-align:center;line-height:1.3;">Checklists<br>Realizados</div>
+      </div>
+
+      <!-- Stat 2: 100% OK -->
+      <div class="stat-box" style="background:#f0fdf4;border:1.5px solid #bbf7d0;">
+        <div class="ring-container">
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle class="ring-bg" cx="44" cy="44" r="36" style="stroke:#bbf7d0;"/>
+            <circle class="ring-fill" cx="44" cy="44" r="36" style="stroke:#22c55e;stroke-dashoffset:30;"/>
+          </svg>
+          <div class="ring-center">
+            <span style="font-size:22px;font-weight:800;color:#16a34a;line-height:1;">11</span>
+            <span style="font-size:9px;color:#22c55e;font-weight:600;">perfeitos</span>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#16a34a;text-align:center;line-height:1.3;">100% OK</div>
+      </div>
+
+      <!-- Stat 3: Taxa OK -->
+      <div class="stat-box" style="background:#eff6ff;border:1.5px solid #bfdbfe;">
+        <div class="ring-container">
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle class="ring-bg" cx="44" cy="44" r="36" style="stroke:#bfdbfe;"/>
+            <circle class="ring-fill" cx="44" cy="44" r="36" style="stroke:#3b82f6;stroke-dashoffset:20;"/>
+          </svg>
+          <div class="ring-center">
+            <span style="font-size:20px;font-weight:800;color:#1d4ed8;line-height:1;">91%</span>
+            <span style="font-size:9px;color:#3b82f6;font-weight:600;">de OK</span>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#1d4ed8;text-align:center;line-height:1.3;">Taxa OK</div>
+      </div>
+
+      <!-- Stat 4: Itens NOK -->
+      <div class="stat-box" style="background:#fff7ed;border:1.5px solid #fed7aa;">
+        <div class="ring-container">
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle class="ring-bg" cx="44" cy="44" r="36" style="stroke:#fed7aa;"/>
+            <circle class="ring-fill" cx="44" cy="44" r="36" style="stroke:#f97316;stroke-dashoffset:210;"/>
+          </svg>
+          <div class="ring-center">
+            <span style="font-size:22px;font-weight:800;color:#ea580c;line-height:1;">3</span>
+            <span style="font-size:9px;color:#f97316;font-weight:600;">itens</span>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#ea580c;text-align:center;line-height:1.3;">Itens NOK</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── SECTION HEADER ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 style="font-size:20px;font-weight:700;color:#18181b;margin:0 0 4px;">Seus Checklists</h2>
+      <p style="font-size:13px;color:#6b7280;margin:0;">Selecione um checklist para preencher ou visualizar</p>
+    </div>
+    <!-- Filter pills -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button style="padding:5px 14px;border-radius:9999px;border:none;background:#7c3aed;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Todos</button>
+      <button style="padding:5px 14px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;">Loja</button>
+      <button style="padding:5px 14px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;">Cozinha</button>
+      <button style="padding:5px 14px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;">Bar</button>
+    </div>
+  </div>
+
+  <!-- ── CHECKLIST CARDS GRID ── -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
+
+    <!-- Card 1: Loja / Abertura (em progresso) -->
+    <div class="card checklist-card area-loja" style="overflow:hidden;">
+      <!-- Color strip at top -->
+      <div style="height:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa);"></div>
+      <div style="padding:20px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <!-- Area icon -->
+              <div style="width:32px;height:32px;border-radius:8px;background:#ede9fe;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              </div>
+              <div>
+                <div style="font-size:15px;font-weight:700;color:#18181b;">Abertura Loja</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge badge-loja">🏪 Loja</span>
+              <span class="badge badge-outline">☀️ Abertura</span>
+            </div>
+          </div>
+          <div style="width:32px;height:32px;border-radius:8px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:6px;">
+            <span>Progresso</span><span style="font-weight:600;color:#7c3aed;">72%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:72%;"></div>
+          </div>
+        </div>
+
+        <!-- Mini stats -->
+        <div style="display:flex;gap:12px;margin-bottom:16px;font-size:12px;">
+          <span style="display:flex;align-items:center;gap:4px;color:#16a34a;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>8 OK
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;color:#dc2626;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>1 NOK
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;color:#d97706;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>3 Pendente
+          </span>
+        </div>
+
+        <button style="width:100%;padding:9px;border-radius:10px;background:#7c3aed;color:#fff;font-size:13px;font-weight:600;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Continuar Checklist
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 2: Cozinha / Abertura (completo) -->
+    <div class="card checklist-card area-cozinha" style="overflow:hidden;">
+      <div style="height:4px;background:linear-gradient(90deg,#0ea5e9,#38bdf8);"></div>
+      <div style="padding:20px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:#e0f2fe;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:#18181b;">Abertura Cozinha</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge badge-cozinha">🍳 Cozinha</span>
+              <span class="badge badge-outline">☀️ Abertura</span>
+            </div>
+          </div>
+          <!-- Completed badge -->
+          <div style="width:32px;height:32px;border-radius:8px;background:#dcfce7;display:flex;align-items:center;justify-content:center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:6px;">
+            <span>Progresso</span><span style="font-weight:600;color:#16a34a;">100%</span>
+          </div>
+          <div class="progress-bar" style="background:#bbf7d0;">
+            <div class="progress-fill" style="width:100%;background:linear-gradient(90deg,#22c55e,#4ade80);"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:16px;font-size:12px;">
+          <span style="display:flex;align-items:center;gap:4px;color:#16a34a;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>12 OK
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;color:#dc2626;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>0 NOK
+          </span>
+        </div>
+
+        <!-- Complete badge -->
+        <div style="background:#dcfce7;border:1.5px solid #bbf7d0;border-radius:10px;padding:8px;text-align:center;font-size:13px;font-weight:700;color:#16a34a;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Checklist Completo
+        </div>
+
+        <button style="width:100%;padding:9px;border-radius:10px;background:transparent;color:#0369a1;font-size:13px;font-weight:600;border:1.5px solid #bae6fd;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Visualizar
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 3: Bar / Fechamento (não iniciado) -->
+    <div class="card checklist-card area-bar" style="overflow:hidden;">
+      <div style="height:4px;background:linear-gradient(90deg,#f59e0b,#fcd34d);"></div>
+      <div style="padding:20px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:#fef3c7;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2"><path d="M8 22h8"/><path d="M7 10h10"/><path d="M12 10V2"/><path d="M8 6l-1.5-4h11L16 6"/><path d="M5 10a7 7 0 0 0 14 0"/></svg>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:#18181b;">Fechamento Bar</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge badge-bar">🍹 Bar</span>
+              <span class="badge badge-outline">🌙 Fechamento</span>
+            </div>
+          </div>
+          <div style="width:32px;height:32px;border-radius:8px;background:#fef9c3;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Not started state -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 0 20px;gap:8px;color:#9ca3af;text-align:center;">
+          <div style="width:44px;height:44px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <span style="font-size:12px;color:#9ca3af;">Ainda não preenchido hoje</span>
+        </div>
+
+        <button style="width:100%;padding:9px;border-radius:10px;background:#f59e0b;color:#fff;font-size:13px;font-weight:600;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Preencher Checklist
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 4: Loja / Fechamento (não iniciado) -->
+    <div class="card checklist-card area-loja" style="overflow:hidden;">
+      <div style="height:4px;background:linear-gradient(90deg,#7c3aed,#a78bfa);"></div>
+      <div style="padding:20px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:#ede9fe;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:#18181b;">Fechamento Loja</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge badge-loja">🏪 Loja</span>
+              <span class="badge badge-outline">🌙 Fechamento</span>
+            </div>
+          </div>
+          <div style="width:32px;height:32px;border-radius:8px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 0 20px;gap:8px;text-align:center;">
+          <div style="width:44px;height:44px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <span style="font-size:12px;color:#9ca3af;">Ainda não preenchido hoje</span>
+        </div>
+
+        <button style="width:100%;padding:9px;border-radius:10px;background:#7c3aed;color:#fff;font-size:13px;font-weight:600;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Preencher Checklist
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 5: Cozinha / Fechamento (NOK) -->
+    <div class="card checklist-card area-cozinha" style="overflow:hidden;">
+      <div style="height:4px;background:linear-gradient(90deg,#0ea5e9,#38bdf8);"></div>
+      <div style="padding:20px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:#e0f2fe;display:flex;align-items:center;justify-content:center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:#18181b;">Fechamento Cozinha</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge badge-cozinha">🍳 Cozinha</span>
+              <span class="badge badge-outline">🌙 Fechamento</span>
+            </div>
+          </div>
+          <!-- NOK warning icon -->
+          <div style="width:32px;height:32px;border-radius:8px;background:#fef2f2;display:flex;align-items:center;justify-content:center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:6px;">
+            <span>Progresso</span><span style="font-weight:600;color:#dc2626;">85%</span>
+          </div>
+          <div class="progress-bar" style="background:#fee2e2;">
+            <div class="progress-fill" style="width:85%;background:linear-gradient(90deg,#ef4444,#f87171);"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:16px;font-size:12px;">
+          <span style="display:flex;align-items:center;gap:4px;color:#16a34a;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>9 OK
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;color:#dc2626;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>2 NOK
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;color:#d97706;font-weight:600;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>1 Pendente
+          </span>
+        </div>
+
+        <button style="width:100%;padding:9px;border-radius:10px;background:#0ea5e9;color:#fff;font-size:13px;font-weight:600;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Continuar Checklist
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- label -->
+  <div style="text-align:center;padding:24px 0 8px;color:#9ca3af;font-size:12px;border-top:1px solid #f3f4f6;margin-top:8px;">
+    Mockup — Design proposto · Nenhum arquivo do projeto foi alterado
+  </div>
+</main>
+
+</body>
+</html>
