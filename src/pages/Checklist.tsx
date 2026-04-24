@@ -274,13 +274,14 @@ const Checklist = () => {
       if (itemsError) throw itemsError;
       setItems(itemsData || []);
 
-      // Load today's responses using frozen date
+      // Load today's responses using frozen date (collaborative, all users for this store)
       const { data: responsesData, error: responsesError } = await supabase
         .from("checklist_responses")
         .select("*")
         .eq("checklist_type_id", id)
-        .eq("user_id", user!.id)
-        .eq("data", operationalDate);
+        .eq("store_id", currentStore.id)
+        .eq("data", operationalDate)
+        .order("created_at", { ascending: true });
 
       if (responsesError) throw responsesError;
 

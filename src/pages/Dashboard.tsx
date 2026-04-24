@@ -364,8 +364,7 @@ const Dashboard = () => {
       const [responsesResult, itemsResult] = await Promise.all([
         supabase
           .from("checklist_responses")
-          .select("checklist_type_id, status, completed_at")
-          .eq("user_id", user.id)
+          .select("checklist_type_id, checklist_item_id, status, completed_at")
           .eq("store_id", currentStore.id)
           .eq("data", today)
           .in("checklist_type_id", checklistIds),
@@ -386,7 +385,13 @@ const Dashboard = () => {
 
       checklistIds.forEach(id => {
         const total = items.filter(i => i.checklist_type_id === id).length;
-        const checklistResponses = responses.filter(r => r.checklist_type_id === id);
+        const allChecklistResponses = responses.filter(r => r.checklist_type_id === id);
+        
+        // Deduplicate by checklist_item_id so multiple users answering the same item don't overcount
+        const uniqueMap = new Map();
+        allChecklistResponses.forEach(r => uniqueMap.set(r.checklist_item_id, r));
+        const checklistResponses = Array.from(uniqueMap.values());
+
         const ok = checklistResponses.filter(r => r.status === 'ok').length;
         const nok = checklistResponses.filter(r => r.status === 'nok').length;
         const answered = ok + nok;
