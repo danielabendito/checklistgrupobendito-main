@@ -1032,7 +1032,7 @@ const Checklist = () => {
                     <Button
                       variant={status === 'ok' ? 'default' : 'outline'}
                       onClick={() => handleStatusChange(item.id, 'ok')}
-                      className={`h-16 text-lg font-bold transition-all duration-200 rounded-xl ${status === 'ok' ? 'bg-success hover:bg-success/90 text-white shadow-xl shadow-success/20 ring-2 ring-success ring-offset-2' : 'hover:bg-success/10 hover:text-success border-2 hover:border-success/50'}`}
+                      className={`h-16 text-lg font-bold transition-all duration-200 rounded-xl ${status === 'ok' ? 'bg-success hover:bg-success/90 text-success-foreground shadow-xl shadow-success/20 ring-2 ring-success ring-offset-2' : 'hover:bg-success/10 hover:text-success border-2 hover:border-success/50'}`}
                     >
                       <CheckCircle2 className="h-6 w-6 mr-2" />
                       SIM
@@ -1040,7 +1040,7 @@ const Checklist = () => {
                     <Button
                       variant={status === 'nok' ? 'default' : 'outline'}
                       onClick={() => handleStatusChange(item.id, 'nok')}
-                      className={`h-16 text-lg font-bold transition-all duration-200 rounded-xl ${status === 'nok' ? 'bg-destructive hover:bg-destructive/90 text-white shadow-xl shadow-destructive/20 ring-2 ring-destructive ring-offset-2' : 'hover:bg-destructive/10 hover:text-destructive border-2 hover:border-destructive/50'}`}
+                      className={`h-16 text-lg font-bold transition-all duration-200 rounded-xl ${status === 'nok' ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-xl shadow-destructive/20 ring-2 ring-destructive ring-offset-2' : 'hover:bg-destructive/10 hover:text-destructive border-2 hover:border-destructive/50'}`}
                     >
                       <XCircle className="h-6 w-6 mr-2" />
                       NÃO
