@@ -428,22 +428,7 @@ const Checklist = () => {
     // Auto-save to database
     await autoSaveItem(itemId, status, undefined, undefined);
 
-    // Auto-advance logic for wizard layout
-    const item = items.find(i => i.id === itemId);
-    if (item && status !== 'pendente') {
-      const needsPhoto = item.requer_foto;
-      const needsObs = item.observacao_obrigatoria;
-      
-      // If no photo or mandatory observation is required, auto-advance
-      if (!needsPhoto && !needsObs) {
-        setTimeout(() => {
-          setCurrentItemIndex(prev => {
-            if (prev < items.length - 1) return prev + 1;
-            return prev;
-          });
-        }, 400); // 400ms delay gives user visual feedback before moving
-      }
-    }
+    // Auto-advance removido a pedido do usuário para evitar confusão
   };
 
   const handleObservacaoChange = (itemId: string, observacoes: string) => {
@@ -567,10 +552,7 @@ const Checklist = () => {
         fileName
       );
 
-      toast({
-        title: "Foto enviada e salva",
-        description: "A foto foi anexada e seu progresso foi salvo automaticamente",
-      });
+      // Toast de foto salva removido a pedido do usuário
     } catch (error: any) {
       console.error('📸 [PHOTO] Erro completo:', error);
       toast({
@@ -1091,16 +1073,7 @@ const Checklist = () => {
             </div>
           )}
 
-          {itemsWithoutPhotos > 0 && (stats.ok + stats.nok) > 0 && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Checklist não realizado</AlertTitle>
-              <AlertDescription>
-                Há {itemsWithoutPhotos} {itemsWithoutPhotos === 1 ? 'item com envio' : 'itens com envios'} de foto pendente. 
-                Confira novamente e envie todas as fotos obrigatórias para finalizar a tarefa.
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* Alerta vermelho removido a pedido do usuário, pois ocupava muito espaço e confundia */}
         </div>
       </header>
 
