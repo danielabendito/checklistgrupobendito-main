@@ -17,6 +17,7 @@ import { z } from "zod";
 import { SecurityWatermark } from "@/components/SecurityWatermark";
 import { useImageCompression } from "@/hooks/useImageCompression";
 import { CameraCapture } from "@/components/CameraCapture";
+import { RewardCelebration } from "@/components/RewardCelebration";
 
 interface ChecklistType {
   id: string;
@@ -85,6 +86,8 @@ const Checklist = () => {
   } | null>(null);
   const [streakDays, setStreakDays] = useState(0);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
+  const [rewardData, setRewardData] = useState<{ title: string; message: string; photo_url: string | null; type: string } | null>(null);
+  const [showReward, setShowReward] = useState(false);
   // Ref to track pending saves
   const pendingSaveRef = useRef<Set<string>>(new Set());
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -660,6 +663,91 @@ const Checklist = () => {
     }
   };
 
+  const checkRewards = async (currentStreak: number) => {
+    if (!user || !currentStore) return;
+    try {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+      // Get monthly responses to calculate total days
+      const { data: monthlyData } = await supabase
+        .from("checklist_responses")
+        .select("data")
+        .eq("user_id", user.id)
+        .eq("store_id", currentStore.id)
+        .gte("data", firstDay)
+        .lte("data", lastDay)
+        .not("completed_at", "is", null);
+
+      let monthlyDays = 0;
+      if (monthlyData) {
+        const uniqueMonthlyDates = new Set(monthlyData.map(r => r.data as string));
+        monthlyDays = uniqueMonthlyDates.size;
+      }
+
+      // Fetch active reward settings
+      const { data: settings } = await supabase
+        .from("reward_settings" as any)
+        .select("*")
+        .eq("store_id", currentStore.id)
+        .eq("is_active", true);
+
+      if (!settings || settings.length === 0) return;
+
+      // Determine which milestones are hit
+      const hitMilestones = [];
+      if (monthlyDays >= 25) hitMilestones.push('total_25');
+      if (monthlyDays >= 15) hitMilestones.push('total_15');
+      if (currentStreak >= 5) hitMilestones.push('streak_5');
+
+      if (hitMilestones.length === 0) return;
+
+      // Check which ones were already granted this month
+      const { data: granted } = await supabase
+        .from("rewards" as any)
+        .select("type")
+        .eq("user_id", user.id)
+        .eq("store_id", currentStore.id)
+        .gte("created_at", firstDay); // Only check this month's rewards
+
+      const grantedTypes = new Set(granted?.map((g: any) => g.type) || []);
+
+      // Find the best new milestone
+      const typesOrder = ['total_25', 'total_15', 'streak_5'];
+      for (const type of typesOrder) {
+        if (hitMilestones.includes(type) && !grantedTypes.has(type)) {
+          const config = settings.find((s: any) => s.type === type);
+          if (config) {
+            // Grant this reward
+            await supabase
+              .from("rewards" as any)
+              .insert({
+                user_id: user.id,
+                store_id: currentStore.id,
+                type: type,
+                title: config.title,
+                message: config.message,
+                photo_url: config.photo_url,
+                created_at: new Date().toISOString()
+              });
+
+            setRewardData({
+              title: config.title,
+              message: config.message,
+              photo_url: config.photo_url,
+              type: type
+            });
+            setShowReward(true);
+            break; // Only grant one at a time
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error checking rewards:", e);
+    }
+  };
+
   const handleSave = async () => {
     try {
       // Validate that items requiring photos have them
@@ -781,6 +869,10 @@ const Checklist = () => {
       // Calcular streak e mostrar tela de conclusão
       const streak = await calculateStreak();
       setStreakDays(streak);
+      
+      // Checar prêmios antes de mostrar a tela
+      await checkRewards(streak);
+
       const finalOk = Object.values(responses).filter(r => r.status === 'ok').length;
       const finalNok = Object.values(responses).filter(r => r.status === 'nok').length;
       const finalPhotos = Object.values(responses).filter(r => r.photo_url !== null).length;
@@ -872,6 +964,14 @@ const Checklist = () => {
         >
           Voltar ao Dashboard
         </Button>
+        
+        {rewardData && (
+          <RewardCelebration
+            isOpen={showReward}
+            onClose={() => setShowReward(false)}
+            reward={rewardData}
+          />
+        )}
       </div>
     );
   }
