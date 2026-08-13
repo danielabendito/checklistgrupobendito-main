@@ -157,17 +157,25 @@ export function InsightsTab({ currentStore, userRole }: InsightsTabProps) {
       .lt('data', currentWeekStart.toISOString().split('T')[0]);
 
     if (currentWeekData && previousWeekData) {
+      // Only count items with an explicit OK/NOK answer. Rows with status
+      // "pendente" are created by the auto-save-on-observation flow before
+      // the user picks OK/NOK, and including them here would count an
+      // unanswered item as a compliance failure.
       const currentOk = currentWeekData.filter(r => r.status === 'ok').length;
+      const currentNok = currentWeekData.filter(r => r.status === 'nok').length;
       const previousOk = previousWeekData.filter(r => r.status === 'ok').length;
-      const currentPercentage = (currentOk / currentWeekData.length) * 100 || 0;
-      const previousPercentage = (previousOk / previousWeekData.length) * 100 || 0;
+      const previousNok = previousWeekData.filter(r => r.status === 'nok').length;
+      const currentAnswered = currentOk + currentNok;
+      const previousAnswered = previousOk + previousNok;
+      const currentPercentage = currentAnswered > 0 ? (currentOk / currentAnswered) * 100 : 0;
+      const previousPercentage = previousAnswered > 0 ? (previousOk / previousAnswered) * 100 : 0;
       const diff = currentPercentage - previousPercentage;
 
       setWeeklyTrend({
         current_ok: currentOk,
-        current_total: currentWeekData.length,
+        current_total: currentAnswered,
         previous_ok: previousOk,
-        previous_total: previousWeekData.length,
+        previous_total: previousAnswered,
         current_percentage: currentPercentage,
         previous_percentage: previousPercentage,
         trend: Math.abs(diff) < 2 ? 'stable' : diff > 0 ? 'up' : 'down',

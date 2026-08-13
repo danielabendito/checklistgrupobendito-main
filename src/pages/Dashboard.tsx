@@ -10,7 +10,6 @@ import { StoreSelector } from "@/components/StoreSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UserStatsCard } from "@/components/UserStatsCard";
-import { getBrasiliaDateString } from "@/lib/utils";
 
 interface Profile {
   id: string;
@@ -27,6 +26,7 @@ interface ChecklistType {
   area: string;
   turno: string;
   allowed_role_ids: string[]; // Changed to UUIDs
+  ativo: boolean;
 }
 
 const Dashboard = () => {
@@ -34,13 +34,6 @@ const Dashboard = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [checklists, setChecklists] = useState<ChecklistType[]>([]);
-  const [completionStatuses, setCompletionStatuses] = useState<Record<string, {
-    total: number;
-    ok: number;
-    nok: number;
-    pendente: number;
-    completed: boolean;
-  }>>({}); 
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   const [showForceLogout, setShowForceLogout] = useState(false);
@@ -312,7 +305,8 @@ const Dashboard = () => {
       const { data, error } = await supabase
         .from("checklist_types")
         .select("*")
-        .eq("store_id", currentStore.id);
+        .eq("store_id", currentStore.id)
+        .eq("ativo", true);
 
       if (error) throw error;
 
@@ -340,11 +334,6 @@ const Dashboard = () => {
       }
 
       setChecklists(filteredChecklists);
-
-      // Carregar status de completude para hoje
-      if (filteredChecklists.length > 0) {
-        await loadCompletionStatuses(filteredChecklists.map(c => c.id));
-      }
     } catch (error: any) {
       toast({
         title: "Erro ao carregar checklists",
@@ -353,62 +342,6 @@ const Dashboard = () => {
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadCompletionStatuses = async (checklistIds: string[]) => {
-    if (!user || !currentStore || checklistIds.length === 0) return;
-
-    const today = getBrasiliaDateString();
-    try {
-      const [responsesResult, itemsResult] = await Promise.all([
-        supabase
-          .from("checklist_responses")
-          .select("checklist_type_id, checklist_item_id, status, completed_at")
-          .eq("store_id", currentStore.id)
-          .eq("data", today)
-          .in("checklist_type_id", checklistIds),
-        supabase
-          .from("checklist_items")
-          .select("id, checklist_type_id")
-          .in("checklist_type_id", checklistIds),
-      ]);
-
-      if (responsesResult.error || itemsResult.error) return;
-
-      const responses = responsesResult.data || [];
-      const items = itemsResult.data || [];
-
-      const statusMap: Record<string, {
-        total: number; ok: number; nok: number; pendente: number; completed: boolean;
-      }> = {};
-
-      checklistIds.forEach(id => {
-        const total = items.filter(i => i.checklist_type_id === id).length;
-        const allChecklistResponses = responses.filter(r => r.checklist_type_id === id);
-        
-        // Deduplicate by checklist_item_id so multiple users answering the same item don't overcount
-        const uniqueMap = new Map();
-        allChecklistResponses.forEach(r => uniqueMap.set(r.checklist_item_id, r));
-        const checklistResponses = Array.from(uniqueMap.values());
-
-        const ok = checklistResponses.filter(r => r.status === 'ok').length;
-        const nok = checklistResponses.filter(r => r.status === 'nok').length;
-        const answered = ok + nok;
-        const completed = checklistResponses.some(r => r.completed_at !== null);
-
-        statusMap[id] = {
-          total,
-          ok,
-          nok,
-          pendente: Math.max(0, total - answered),
-          completed,
-        };
-      });
-
-      setCompletionStatuses(statusMap);
-    } catch (error) {
-      console.error("Erro ao carregar status de completude:", error);
     }
   };
 
@@ -514,7 +447,6 @@ const Dashboard = () => {
                   nome={checklist.nome}
                   area={checklist.area}
                   turno={checklist.turno}
-                  completionStatus={completionStatuses[checklist.id]}
                 />
               ))}
             </div>

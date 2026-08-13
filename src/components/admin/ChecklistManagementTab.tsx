@@ -1,12 +1,14 @@
-import { Plus, Edit, Trash2, Upload, Download, Package, ListOrdered } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download, Package } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useStore } from "@/contexts/StoreContext";
+import { supabase } from "@/integrations/supabase/client";
 import { exportChecklistsToExcel } from "@/lib/exportUtils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -27,6 +29,7 @@ interface ChecklistType {
   turno: ShiftType;
   allowed_role_ids: string[];
   created_at: string;
+  ativo: boolean;
 }
 
 interface ChecklistItem {
@@ -58,7 +61,7 @@ interface ChecklistManagementTabProps {
   onSetStagingConfirmOpen: (open: boolean) => void;
   onToggleItemSelection: (itemId: string) => void;
   onToggleAllItems: (checklistId: string) => void;
-  onFixAllOrder: () => void;
+  onDataChanged: () => void;
 }
 
 export const ChecklistManagementTab = ({
@@ -80,10 +83,37 @@ export const ChecklistManagementTab = ({
   onSetStagingConfirmOpen,
   onToggleItemSelection,
   onToggleAllItems,
-  onFixAllOrder,
+  onDataChanged,
 }: ChecklistManagementTabProps) => {
   const { currentStore } = useStore();
   const { toast } = useToast();
+
+  const handleToggleActive = async (checklist: ChecklistType) => {
+    const nextAtivo = !checklist.ativo;
+    try {
+      const { error } = await supabase
+        .from("checklist_types")
+        .update({ ativo: nextAtivo })
+        .eq("id", checklist.id);
+
+      if (error) throw error;
+
+      toast({
+        title: nextAtivo ? "Checklist reativado" : "Checklist pausado",
+        description: nextAtivo
+          ? `"${checklist.nome}" voltou a aparecer para os colaboradores.`
+          : `"${checklist.nome}" não aparecerá mais para preenchimento até ser reativado.`,
+      });
+
+      onDataChanged();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao alterar status do checklist",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Tabs value={activeSubTab} onValueChange={onSubTabChange} className="space-y-4">
@@ -115,11 +145,16 @@ export const ChecklistManagementTab = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {checklists.map((checklist) => (
-              <Card key={checklist.id}>
+              <Card key={checklist.id} className={!checklist.ativo ? "opacity-70" : undefined}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle>{checklist.nome}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle>{checklist.nome}</CardTitle>
+                        {!checklist.ativo && (
+                          <Badge variant="secondary">Pausado</Badge>
+                        )}
+                      </div>
                       <CardDescription>
                         {checklist.area} - {checklist.turno}
                       </CardDescription>
@@ -157,6 +192,16 @@ export const ChecklistManagementTab = ({
                   <p className="text-sm text-muted-foreground mt-2">
                     {items.filter(i => i.checklist_type_id === checklist.id).length} itens
                   </p>
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <label htmlFor={`ativo-${checklist.id}`} className="text-sm font-medium cursor-pointer">
+                      {checklist.ativo ? "Ativo" : "Pausado"}
+                    </label>
+                    <Switch
+                      id={`ativo-${checklist.id}`}
+                      checked={checklist.ativo}
+                      onCheckedChange={() => handleToggleActive(checklist)}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -224,14 +269,6 @@ export const ChecklistManagementTab = ({
                 Revisar Importação ({stagingCount})
               </Button>
             )}
-            <Button 
-              variant="outline"
-              onClick={() => onFixAllOrder()}
-              disabled={items.length === 0}
-            >
-              <ListOrdered className="h-4 w-4 mr-2" />
-              Reorganizar Numeração
-            </Button>
             <Button onClick={() => {
               onSetSelectedItem(null);
               onSetItemDialogOpen(true);

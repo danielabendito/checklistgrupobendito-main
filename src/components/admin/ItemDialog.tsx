@@ -31,6 +31,7 @@ interface ItemDialogProps {
   onOpenChange: (open: boolean) => void;
   item?: ChecklistItem | null;
   checklists: ChecklistType[];
+  existingItems: ChecklistItem[];
   onSuccess: () => void;
 }
 
@@ -49,15 +50,13 @@ const itemSchema = z.object({
     .min(1, "Ordem deve ser no mínimo 1"),
 });
 
-export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: ItemDialogProps) {
+export function ItemDialog({ open, onOpenChange, item, checklists, existingItems, onSuccess }: ItemDialogProps) {
   const { toast } = useToast();
   const { currentStore } = useStore();
   const [loading, setLoading] = useState(false);
-  const [loadingOrdem, setLoadingOrdem] = useState(false);
   const [nome, setNome] = useState("");
   const [checklistTypeId, setChecklistTypeId] = useState("");
   const [ordem, setOrdem] = useState("");
-  const [ordemAutoFilled, setOrdemAutoFilled] = useState(false);
   const [requerObservacao, setRequerObservacao] = useState(false);
   const [observacaoObrigatoria, setObservacaoObrigatoria] = useState(false);
   const [requerFoto, setRequerFoto] = useState(false);
@@ -67,7 +66,6 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
       setNome(item.nome);
       setChecklistTypeId(item.checklist_type_id);
       setOrdem(item.ordem.toString());
-      setOrdemAutoFilled(false);
       setRequerObservacao(item.requer_observacao);
       setObservacaoObrigatoria(item.observacao_obrigatoria);
       setRequerFoto(item.requer_foto);
@@ -75,39 +73,30 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
       setNome("");
       setChecklistTypeId("");
       setOrdem("");
-      setOrdemAutoFilled(false);
       setRequerObservacao(false);
       setObservacaoObrigatoria(false);
       setRequerFoto(false);
     }
   }, [item, open]);
 
-  // Auto-numeração: busca o maior ordem do checklist selecionado
+  // Items in the same checklist as the one currently selected, excluding
+  // the item being edited (so it doesn't collide with its own order).
+  const siblingItems = existingItems.filter(
+    (i) => i.checklist_type_id === checklistTypeId && i.id !== item?.id
+  );
+
+  // Auto-suggest the next free order number for new items, so admins don't
+  // have to hand-count existing items to avoid gaps/duplicates.
   useEffect(() => {
-    if (!checklistTypeId || item) return; // Não auto-preenche ao editar
-
-    const fetchNextOrdem = async () => {
-      setLoadingOrdem(true);
-      try {
-        const { data } = await supabase
-          .from("checklist_items")
-          .select("ordem")
-          .eq("checklist_type_id", checklistTypeId)
-          .order("ordem", { ascending: false })
-          .limit(1);
-
-        const maxOrdem = data?.[0]?.ordem ?? 0;
-        setOrdem((maxOrdem + 1).toString());
-        setOrdemAutoFilled(true);
-      } catch {
-        // Silently fail, user can type manually
-      } finally {
-        setLoadingOrdem(false);
-      }
-    };
-
-    fetchNextOrdem();
+    if (!item && checklistTypeId && !ordem) {
+      const maxOrdem = siblingItems.reduce((max, i) => Math.max(max, i.ordem), 0);
+      setOrdem(String(maxOrdem + 1));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checklistTypeId, item]);
+
+  const isDuplicateOrdem = (value: number) =>
+    siblingItems.some((i) => i.ordem === value);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,6 +115,15 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
       toast({
         title: "Erro de validação",
         description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isDuplicateOrdem(ordemNum)) {
+      toast({
+        title: "Ordem já utilizada",
+        description: `Já existe outro item com a ordem ${ordemNum} neste checklist. Escolha um número diferente.`,
         variant: "destructive",
       });
       return;
@@ -214,14 +212,7 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="checklist">Checklist *</Label>
-            <Select
-              value={checklistTypeId}
-              onValueChange={(val) => {
-                setChecklistTypeId(val);
-                setOrdemAutoFilled(false); // Reseta flag ao trocar checklist
-              }}
-              required
-            >
+            <Select value={checklistTypeId} onValueChange={setChecklistTypeId} required>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o checklist" />
               </SelectTrigger>
@@ -236,27 +227,21 @@ export function ItemDialog({ open, onOpenChange, item, checklists, onSuccess }: 
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ordem">Ordem</Label>
-              {ordemAutoFilled && (
-                <span className="text-xs text-muted-foreground">
-                  ✓ Preenchido automaticamente
-                </span>
-              )}
-            </div>
+            <Label htmlFor="ordem">Ordem *</Label>
             <Input
               id="ordem"
               type="number"
               min="1"
               value={ordem}
-              onChange={(e) => {
-                setOrdem(e.target.value);
-                setOrdemAutoFilled(false);
-              }}
-              placeholder={loadingOrdem ? "Calculando..." : "Ex: 1"}
-              disabled={loadingOrdem}
+              onChange={(e) => setOrdem(e.target.value)}
+              placeholder="Ex: 1"
               required
             />
+            {ordem && isDuplicateOrdem(parseInt(ordem)) && (
+              <p className="text-sm text-destructive">
+                Já existe um item com a ordem {ordem} neste checklist.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

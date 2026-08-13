@@ -17,6 +17,14 @@ interface ChecklistExecution {
   completed_at: string | null;
 }
 
+// Items still "pendente" (no explicit OK/NOK yet, e.g. only an observation
+// was typed in) must not count against conformidade — they aren't failures,
+// they're unanswered. Conformidade is measured over answered items only.
+const conformidadePercent = (exec: ChecklistExecution) => {
+  const answered = exec.items_ok + exec.items_nok;
+  return answered > 0 ? Math.round((exec.items_ok / answered) * 100) : 0;
+};
+
 export const exportToExcel = (executions: ChecklistExecution[], date: Date) => {
   const exportData = executions.map(exec => ({
     "Checklist": exec.checklist_type_name,
@@ -26,8 +34,8 @@ export const exportToExcel = (executions: ChecklistExecution[], date: Date) => {
     "Total de Itens": exec.items_total,
     "Itens OK": exec.items_ok,
     "Itens NOK": exec.items_nok,
-    "% Conformidade": Math.round((exec.items_ok / exec.items_total) * 100) + "%",
-    "Fotos": exec.items_with_required_photos > 0 
+    "% Conformidade": conformidadePercent(exec) + "%",
+    "Fotos": exec.items_with_required_photos > 0
       ? `${exec.items_with_photos_uploaded}/${exec.items_with_required_photos}`
       : "N/A"
   }));
@@ -71,8 +79,8 @@ export const exportToPDF = (executions: ChecklistExecution[], date: Date) => {
     exec.completed_at ? format(new Date(exec.completed_at), "HH:mm", { locale: ptBR }) : "-",
     exec.items_ok.toString(),
     exec.items_nok.toString(),
-    Math.round((exec.items_ok / exec.items_total) * 100) + "%",
-    exec.items_with_required_photos > 0 
+    conformidadePercent(exec) + "%",
+    exec.items_with_required_photos > 0
       ? `${exec.items_with_photos_uploaded}/${exec.items_with_required_photos}`
       : "N/A"
   ]);
@@ -119,8 +127,8 @@ export const exportToCSV = (executions: ChecklistExecution[], date: Date) => {
     exec.items_total.toString(),
     exec.items_ok.toString(),
     exec.items_nok.toString(),
-    Math.round((exec.items_ok / exec.items_total) * 100) + "%",
-    exec.items_with_required_photos > 0 
+    conformidadePercent(exec) + "%",
+    exec.items_with_required_photos > 0
       ? `${exec.items_with_photos_uploaded}/${exec.items_with_required_photos}`
       : "N/A"
   ]);

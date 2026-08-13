@@ -17,7 +17,6 @@ import { z } from "zod";
 import { SecurityWatermark } from "@/components/SecurityWatermark";
 import { useImageCompression } from "@/hooks/useImageCompression";
 import { CameraCapture } from "@/components/CameraCapture";
-import { RewardCelebration } from "@/components/RewardCelebration";
 
 interface ChecklistType {
   id: string;
@@ -25,6 +24,7 @@ interface ChecklistType {
   area: string;
   turno: string;
   allowed_role_ids: string[];
+  ativo: boolean;
 }
 
 interface ChecklistItem {
@@ -77,17 +77,7 @@ const Checklist = () => {
   const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
   const [cameraOpenFor, setCameraOpenFor] = useState<string | null>(null);
   const [checklistDate, setChecklistDate] = useState<string>(getBrasiliaDateString());
-  const [showCompletionScreen, setShowCompletionScreen] = useState(false);
-  const [completionSummary, setCompletionSummary] = useState<{
-    ok: number;
-    nok: number;
-    total: number;
-    photos: number;
-  } | null>(null);
-  const [streakDays, setStreakDays] = useState(0);
-  const [currentItemIndex, setCurrentItemIndex] = useState(0);
-  const [rewardData, setRewardData] = useState<{ title: string; message: string; photo_url: string | null; type: string } | null>(null);
-  const [showReward, setShowReward] = useState(false);
+  
   // Ref to track pending saves
   const pendingSaveRef = useRef<Set<string>>(new Set());
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -256,6 +246,15 @@ const Checklist = () => {
         navigate('/');
         return;
       }
+      if (!checklistData.ativo) {
+        toast({
+          title: "Checklist pausado",
+          description: "Este checklist foi pausado por um administrador e não pode ser preenchido no momento.",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
 
       setChecklist(checklistData);
 
@@ -277,14 +276,13 @@ const Checklist = () => {
       if (itemsError) throw itemsError;
       setItems(itemsData || []);
 
-      // Load today's responses using frozen date (collaborative, all users for this store)
+      // Load today's responses using frozen date
       const { data: responsesData, error: responsesError } = await supabase
         .from("checklist_responses")
         .select("*")
         .eq("checklist_type_id", id)
-        .eq("store_id", currentStore.id)
-        .eq("data", operationalDate)
-        .order("created_at", { ascending: true });
+        .eq("user_id", user!.id)
+        .eq("data", operationalDate);
 
       if (responsesError) throw responsesError;
 
@@ -427,8 +425,6 @@ const Checklist = () => {
 
     // Auto-save to database
     await autoSaveItem(itemId, status, undefined, undefined);
-
-    // Auto-advance removido a pedido do usuário para evitar confusão
   };
 
   const handleObservacaoChange = (itemId: string, observacoes: string) => {
@@ -552,7 +548,10 @@ const Checklist = () => {
         fileName
       );
 
-      // Toast de foto salva removido a pedido do usuário
+      toast({
+        title: "Foto enviada e salva",
+        description: "A foto foi anexada e seu progresso foi salvo automaticamente",
+      });
     } catch (error: any) {
       console.error('📸 [PHOTO] Erro completo:', error);
       toast({
@@ -606,127 +605,6 @@ const Checklist = () => {
         description: error.message,
         variant: "destructive",
       });
-    }
-  };
-
-  const calculateStreak = async (): Promise<number> => {
-    if (!user || !currentStore) return 1;
-    try {
-      const { data } = await supabase
-        .from("checklist_responses")
-        .select("data")
-        .eq("user_id", user.id)
-        .eq("store_id", currentStore.id)
-        .not("completed_at", "is", null)
-        .order("data", { ascending: false });
-
-      if (!data || data.length === 0) return 1;
-
-      const uniqueDates = [...new Set(data.map(r => r.data as string))].sort((a, b) => b.localeCompare(a));
-      let streak = 0;
-      let checkDate = getBrasiliaDateString();
-
-      for (const date of uniqueDates) {
-        if (date === checkDate) {
-          streak++;
-          const [y, m, d] = checkDate.split('-').map(Number);
-          const prev = new Date(y, m - 1, d - 1);
-          const py = prev.getFullYear();
-          const pm = String(prev.getMonth() + 1).padStart(2, '0');
-          const pd = String(prev.getDate()).padStart(2, '0');
-          checkDate = `${py}-${pm}-${pd}`;
-        } else {
-          break;
-        }
-      }
-      return Math.max(streak, 1);
-    } catch {
-      return 1;
-    }
-  };
-
-  const checkRewards = async (currentStreak: number) => {
-    if (!user || !currentStore) return;
-    try {
-      const now = new Date();
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-
-      // Get monthly responses to calculate total days
-      const { data: monthlyData } = await supabase
-        .from("checklist_responses")
-        .select("data")
-        .eq("user_id", user.id)
-        .eq("store_id", currentStore.id)
-        .gte("data", firstDay)
-        .lte("data", lastDay)
-        .not("completed_at", "is", null);
-
-      let monthlyDays = 0;
-      if (monthlyData) {
-        const uniqueMonthlyDates = new Set(monthlyData.map(r => r.data as string));
-        monthlyDays = uniqueMonthlyDates.size;
-      }
-
-      // Fetch active reward settings
-      const { data: settings } = await supabase
-        .from("reward_settings" as any)
-        .select("*")
-        .eq("store_id", currentStore.id)
-        .eq("is_active", true);
-
-      if (!settings || settings.length === 0) return;
-
-      // Determine which milestones are hit
-      const hitMilestones = [];
-      if (monthlyDays >= 25) hitMilestones.push('total_25');
-      if (monthlyDays >= 15) hitMilestones.push('total_15');
-      if (currentStreak >= 5) hitMilestones.push('streak_5');
-
-      if (hitMilestones.length === 0) return;
-
-      // Check which ones were already granted this month
-      const { data: granted } = await supabase
-        .from("rewards" as any)
-        .select("type")
-        .eq("user_id", user.id)
-        .eq("store_id", currentStore.id)
-        .gte("created_at", firstDay); // Only check this month's rewards
-
-      const grantedTypes = new Set(granted?.map((g: any) => g.type) || []);
-
-      // Find the best new milestone
-      const typesOrder = ['total_25', 'total_15', 'streak_5'];
-      for (const type of typesOrder) {
-        if (hitMilestones.includes(type) && !grantedTypes.has(type)) {
-          const config = settings.find((s: any) => s.type === type);
-          if (config) {
-            // Grant this reward
-            await supabase
-              .from("rewards" as any)
-              .insert({
-                user_id: user.id,
-                store_id: currentStore.id,
-                type: type,
-                title: config.title,
-                message: config.message,
-                photo_url: config.photo_url,
-                created_at: new Date().toISOString()
-              });
-
-            setRewardData({
-              title: config.title,
-              message: config.message,
-              photo_url: config.photo_url,
-              type: type
-            });
-            setShowReward(true);
-            break; // Only grant one at a time
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Error checking rewards:", e);
     }
   };
 
@@ -848,23 +726,8 @@ const Checklist = () => {
         setInspecting(false);
       }
 
-      // Calcular streak e mostrar tela de conclusão
-      const streak = await calculateStreak();
-      setStreakDays(streak);
-      
-      // Checar prêmios antes de mostrar a tela
-      await checkRewards(streak);
-
-      const finalOk = Object.values(responses).filter(r => r.status === 'ok').length;
-      const finalNok = Object.values(responses).filter(r => r.status === 'nok').length;
-      const finalPhotos = Object.values(responses).filter(r => r.photo_url !== null).length;
-      setCompletionSummary({
-        ok: finalOk,
-        nok: finalNok,
-        total: items.length,
-        photos: finalPhotos,
-      });
-      setShowCompletionScreen(true);
+      // Reload responses
+      await loadChecklistData();
 
     } catch (error: any) {
       toast({
@@ -888,74 +751,6 @@ const Checklist = () => {
 
   if (!checklist) {
     return null;
-  }
-
-  // Tela de conclusão após finalizar
-  if (showCompletionScreen && completionSummary) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-success/10 flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-28 h-28 rounded-full bg-success/10 border-4 border-success flex items-center justify-center mb-8 animate-pulse">
-          <CheckCircle2 className="h-14 w-14 text-success" />
-        </div>
-        <h1 className="text-3xl font-bold mb-2">🎉 Checklist Concluído!</h1>
-        <p className="text-muted-foreground text-lg mb-8">{checklist.nome}</p>
-
-        <Card className="w-full max-w-sm mb-6 border-success/20 bg-success/5">
-          <CardContent className="pt-6 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-success font-medium">
-                <CheckCircle2 className="h-4 w-4" /> Itens OK
-              </span>
-              <span className="font-bold text-xl">{completionSummary.ok}/{completionSummary.total}</span>
-            </div>
-            {completionSummary.nok > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2 text-destructive font-medium">
-                  <XCircle className="h-4 w-4" /> Itens NOK
-                </span>
-                <span className="font-bold text-xl text-destructive">{completionSummary.nok}</span>
-              </div>
-            )}
-            {completionSummary.photos > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2 text-primary font-medium">
-                  <Camera className="h-4 w-4" /> Fotos enviadas
-                </span>
-                <span className="font-bold text-xl">{completionSummary.photos}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {streakDays >= 2 ? (
-          <div className="mb-8 px-6 py-4 bg-orange-500/10 rounded-2xl border border-orange-500/20 w-full max-w-sm">
-            <p className="text-orange-500 font-bold text-xl">🔥 {streakDays} dias seguidos!</p>
-            <p className="text-sm text-muted-foreground mt-1">Continue assim, você está arrasando!</p>
-          </div>
-        ) : (
-          <div className="mb-8 px-6 py-4 bg-primary/10 rounded-2xl border border-primary/20 w-full max-w-sm">
-            <p className="text-primary font-semibold text-lg">🌟 Excelente trabalho!</p>
-            <p className="text-sm text-muted-foreground mt-1">Volte amanhã para iniciar uma sequência!</p>
-          </div>
-        )}
-
-        <Button
-          size="lg"
-          className="w-full max-w-sm h-14 text-base"
-          onClick={() => navigate('/')}
-        >
-          Voltar ao Dashboard
-        </Button>
-        
-        {rewardData && (
-          <RewardCelebration
-            isOpen={showReward}
-            onClose={() => setShowReward(false)}
-            reward={rewardData}
-          />
-        )}
-      </div>
-    );
   }
 
   const stats = {
@@ -1057,84 +852,89 @@ const Checklist = () => {
             )}
           </div>
 
-          {/* Barra de progresso */}
-          {stats.total > 0 && (
-            <div className="mt-3">
-              <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                <span>{stats.ok + stats.nok} de {stats.total} itens respondidos</span>
-                <span className="font-semibold">{Math.round(((stats.ok + stats.nok) / stats.total) * 100)}%</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-full bg-success rounded-full transition-all duration-500"
-                  style={{ width: `${((stats.ok + stats.nok) / stats.total) * 100}%` }}
-                />
-              </div>
-            </div>
+          {itemsWithoutPhotos > 0 && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Checklist não realizado</AlertTitle>
+              <AlertDescription>
+                Há {itemsWithoutPhotos} {itemsWithoutPhotos === 1 ? 'item com envio' : 'itens com envios'} de foto pendente. 
+                Confira novamente e envie todas as fotos obrigatórias para finalizar a tarefa.
+              </AlertDescription>
+            </Alert>
           )}
-
-          {/* Alerta vermelho removido a pedido do usuário, pois ocupava muito espaço e confundia */}
         </div>
       </header>
 
-            <main className="container mx-auto px-4 py-8 max-w-2xl">
-        {items.length > 0 && currentItemIndex < items.length && (() => {
-          const item = items[currentItemIndex];
-          const response = responses[item.id];
-          const status = response?.status || 'pendente';
+      <main className="container mx-auto px-4 py-8">
+        <Alert className="mb-6 border-primary bg-primary/5">
+          <AlertCircle className="h-5 w-5" />
+          <AlertTitle className="text-lg font-bold">Instruções Importantes</AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            <p className="font-medium">
+              Por favor, leia atentamente antes de iniciar:
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-sm">
+              <li>Execute cada item do checklist com atenção e cuidado.</li>
+              <li>Adicione fotos de evidência nos itens que exigem.</li>
+              <li>Tire fotos claras que mostrem claramente o item verificado.</li>
+              <li>Adicione observações quando necessário para complementar a informação.</li>
+              <li className="text-primary font-medium">Seu progresso é salvo automaticamente após cada ação.</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
 
-          return (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex justify-between items-center text-sm font-medium text-muted-foreground px-2">
-                <span>Passo {currentItemIndex + 1} de {items.length}</span>
-              </div>
+        <div className="space-y-4">
+          {items.map((item) => {
+            const response = responses[item.id];
+            const status = response?.status || 'pendente';
 
-              <Card className={`transition-all duration-300 border-2 ${status === 'ok' ? 'border-success bg-success/5 shadow-success/10 shadow-lg' : status === 'nok' ? 'border-destructive bg-destructive/5 shadow-destructive/10 shadow-lg' : 'border-primary/20 shadow-lg'}`}>
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                        {item.ordem}
-                      </div>
-                      <CardTitle className="text-xl leading-tight">{item.nome}</CardTitle>
-                    </div>
+            return (
+              <Card key={item.id}>
+                <CardHeader>
+                  <div className="flex items-start gap-4">
+                    <Badge variant="outline" className="shrink-0">
+                      {item.ordem}
+                    </Badge>
+                    <CardTitle className="text-base flex-1">{item.nome}</CardTitle>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
+                <CardContent className="space-y-4">
+                  <div className="flex gap-4">
                     <Button
                       variant={status === 'ok' ? 'default' : 'outline'}
+                      size="sm"
                       onClick={() => handleStatusChange(item.id, 'ok')}
-                      className={`h-16 text-lg font-bold transition-all duration-200 rounded-xl ${status === 'ok' ? 'bg-success hover:bg-success/90 text-success-foreground shadow-xl shadow-success/20 ring-2 ring-success ring-offset-2' : 'hover:bg-success/10 hover:text-success border-2 hover:border-success/50'}`}
+                      className={status === 'ok' ? 'bg-success hover:bg-success/90' : ''}
                     >
-                      <CheckCircle2 className="h-6 w-6 mr-2" />
-                      SIM
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      OK
                     </Button>
                     <Button
                       variant={status === 'nok' ? 'default' : 'outline'}
+                      size="sm"
                       onClick={() => handleStatusChange(item.id, 'nok')}
-                      className={`h-16 text-lg font-bold transition-all duration-200 rounded-xl ${status === 'nok' ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-xl shadow-destructive/20 ring-2 ring-destructive ring-offset-2' : 'hover:bg-destructive/10 hover:text-destructive border-2 hover:border-destructive/50'}`}
+                      className={status === 'nok' ? 'bg-destructive hover:bg-destructive/90' : ''}
                     >
-                      <XCircle className="h-6 w-6 mr-2" />
-                      NÃO
+                      <XCircle className="h-4 w-4 mr-2" />
+                      NOK
                     </Button>
                   </div>
 
-                  {(item.requer_observacao || status === 'nok') && (
-                    <div className="space-y-3 pt-2">
-                      <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  {item.requer_observacao && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                         Observações
                         {item.observacao_obrigatoria && <span className="text-destructive">*</span>}
                       </label>
                       <Textarea
                         placeholder={
                           item.observacao_obrigatoria 
-                            ? 'Campo obrigatório - descreva a situação detalhadamente...' 
-                            : 'Adicione observações adicionais se necessário...'
+                            ? "Campo obrigatório - adicione observações..." 
+                            : "Adicione observações (opcional)..."
                         }
                         value={response?.observacoes || ''}
                         onChange={(e) => handleObservacaoChange(item.id, e.target.value)}
-                        className="min-h-[100px] resize-none text-base p-4 rounded-xl"
+                        className="min-h-[80px]"
                         maxLength={2000}
                         required={item.observacao_obrigatoria}
                       />
@@ -1142,26 +942,25 @@ const Checklist = () => {
                   )}
 
                   {item.requer_foto && (
-                    <div className="space-y-3 pt-2 border-t mt-4">
-                      <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        Foto de Evidência Obrigatória <span className="text-destructive">*</span>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        Foto de Evidência <span className="text-destructive">*</span>
                       </Label>
                       {signedPhotoUrls[item.id] ? (
-                        <div className="relative group rounded-xl overflow-hidden shadow-md">
+                        <div className="relative">
                           <img 
                             src={signedPhotoUrls[item.id]} 
                             alt="Evidência" 
-                            className="w-full h-56 object-cover"
+                            className="w-full h-48 object-cover rounded-lg"
                           />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Button
-                              variant="destructive"
-                              className="rounded-full shadow-lg"
-                              onClick={() => handleRemovePhoto(item.id)}
-                            >
-                              <X className="h-4 w-4 mr-2" /> Remover Foto
-                            </Button>
-                          </div>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2"
+                            onClick={() => handleRemovePhoto(item.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -1174,20 +973,20 @@ const Checklist = () => {
                             }}
                             disabled={uploadingPhoto === item.id}
                           />
-                          <Button 
-                            variant="outline" 
-                            className="w-full h-16 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 rounded-xl text-base"
+                          <Button
+                            variant="outline"
+                            className="w-full"
                             onClick={() => setCameraOpenFor(item.id)}
                             disabled={uploadingPhoto === item.id}
                           >
                             {uploadingPhoto === item.id ? (
                               <>
-                                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                 Enviando...
                               </>
                             ) : (
                               <>
-                                <Camera className="h-5 w-5 mr-2" />
+                                <Camera className="h-4 w-4 mr-2" />
                                 Tirar Foto
                               </>
                             )}
@@ -1198,46 +997,16 @@ const Checklist = () => {
                   )}
                 </CardContent>
               </Card>
+            );
+          })}
+        </div>
 
-              <div className="flex gap-4 pt-4">
-                <Button 
-                  variant="outline" 
-                  size="lg"
-                  className="w-1/3 h-14 text-base rounded-xl"
-                  onClick={() => setCurrentItemIndex(prev => prev - 1)}
-                  disabled={currentItemIndex === 0}
-                >
-                  Anterior
-                </Button>
-                
-                {currentItemIndex === items.length - 1 ? (
-                  <Button 
-                    size="lg"
-                    className="flex-1 h-14 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
-                    onClick={handleSave}
-                    disabled={saving || inspecting || !canSave}
-                  >
-                    {saving || inspecting ? (
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-5 w-5 mr-2" />
-                    )}
-                    Concluir
-                  </Button>
-                ) : (
-                  <Button 
-                    size="lg"
-                    variant="secondary"
-                    className="flex-1 h-14 text-base font-bold rounded-xl"
-                    onClick={() => setCurrentItemIndex(prev => prev + 1)}
-                  >
-                    Próximo
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+        <div className="mt-8 flex justify-center">
+          <Button onClick={handleSave} disabled={saving || !canSave} size="lg">
+            <Save className="h-5 w-5 mr-2" />
+            {saving ? "Salvando..." : canSave ? "Salvar Checklist" : `Faltam ${itemsWithoutPhotos} ${itemsWithoutPhotos === 1 ? 'foto' : 'fotos'}`}
+          </Button>
+        </div>
       </main>
     </div>
   );
