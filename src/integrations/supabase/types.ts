@@ -364,6 +364,7 @@ export type Database = {
           allowed_role_ids: string[] | null
           allowed_roles: Database["public"]["Enums"]["user_role"][]
           area: Database["public"]["Enums"]["checklist_area"]
+          ativo: boolean
           created_at: string | null
           id: string
           nome: string
@@ -374,6 +375,7 @@ export type Database = {
           allowed_role_ids?: string[] | null
           allowed_roles: Database["public"]["Enums"]["user_role"][]
           area: Database["public"]["Enums"]["checklist_area"]
+          ativo?: boolean
           created_at?: string | null
           id?: string
           nome: string
@@ -384,6 +386,7 @@ export type Database = {
           allowed_role_ids?: string[] | null
           allowed_roles?: Database["public"]["Enums"]["user_role"][]
           area?: Database["public"]["Enums"]["checklist_area"]
+          ativo?: boolean
           created_at?: string | null
           id?: string
           nome?: string
@@ -747,6 +750,98 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reward_settings: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          message: string
+          photo_url: string | null
+          store_id: string
+          title: string
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          message: string
+          photo_url?: string | null
+          store_id: string
+          title: string
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          message?: string
+          photo_url?: string | null
+          store_id?: string
+          title?: string
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reward_settings_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rewards: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string
+          photo_url: string | null
+          store_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message: string
+          photo_url?: string | null
+          store_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string
+          photo_url?: string | null
+          store_id?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rewards_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rewards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

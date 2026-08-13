@@ -22,7 +22,6 @@ import { ImportItemsDialog } from "@/components/admin/ImportItemsDialog";
 import { StagingItemsConfirmation } from "@/components/admin/StagingItemsConfirmation";
 import { GettingStartedTab } from "@/components/admin/GettingStartedTab";
 import { WhatsAppRecipientsCard } from "@/components/admin/WhatsAppRecipientsCard";
-import { RewardSettingsTab } from "@/components/admin/RewardSettingsTab";
 
 // New consolidated tab components
 import { InspectionTab } from "@/components/admin/InspectionTab";
@@ -46,6 +45,7 @@ interface ChecklistType {
   turno: ShiftType;
   allowed_role_ids: string[];
   created_at: string;
+  ativo: boolean;
 }
 
 interface Role {
@@ -305,65 +305,10 @@ const Admin = () => {
     }
   };
 
-  const renumberChecklistItems = async (checklistTypeId: string) => {
-    if (!currentStore) return;
-    try {
-      const { data: remainingItems, error: fetchError } = await supabase
-        .from("checklist_items")
-        .select("id, ordem")
-        .eq("checklist_type_id", checklistTypeId)
-        .eq("store_id", currentStore.id)
-        .order("ordem", { ascending: true });
-
-      if (fetchError || !remainingItems) return;
-
-      const updatePromises = remainingItems.map((item, index) => 
-        supabase
-          .from("checklist_items")
-          .update({ ordem: index + 1 })
-          .eq("id", item.id)
-      );
-      
-      await Promise.all(updatePromises);
-    } catch (e) {
-      console.error("Erro ao renumerar itens:", e);
-    }
-  };
-
-  const handleFixAllOrder = async () => {
-    if (!currentStore || checklists.length === 0) return;
-    setLoading(true);
-    try {
-      toast({
-        title: "Reorganizando...",
-        description: "Organizando numeração de todos os checklists.",
-      });
-      for (const checklist of checklists) {
-        await renumberChecklistItems(checklist.id);
-      }
-      toast({
-        title: "Sucesso",
-        description: "Numeração reorganizada com sucesso!",
-      });
-      loadData();
-    } catch (e: any) {
-      toast({
-        title: "Erro ao organizar",
-        description: e.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDeleteItem = async () => {
     if (!itemToDelete || itemToDelete.type !== 'item' || !currentStore) return;
 
     try {
-      const itemToDel = items.find(i => i.id === itemToDelete.id);
-      const checklistTypeId = itemToDel?.checklist_type_id;
-
       const { error } = await supabase
         .from("checklist_items")
         .delete()
@@ -371,10 +316,6 @@ const Admin = () => {
         .eq("store_id", currentStore.id);
 
       if (error) throw error;
-
-      if (checklistTypeId) {
-        await renumberChecklistItems(checklistTypeId);
-      }
 
       toast({
         title: "Sucesso",
@@ -406,9 +347,6 @@ const Admin = () => {
     if (selectedItems.size === 0 || !currentStore) return;
 
     try {
-      const itemsToDel = items.filter(i => selectedItems.has(i.id));
-      const checklistTypeIds = [...new Set(itemsToDel.map(i => i.checklist_type_id))];
-
       const { error } = await supabase
         .from("checklist_items")
         .delete()
@@ -416,10 +354,6 @@ const Admin = () => {
         .eq("store_id", currentStore.id);
 
       if (error) throw error;
-
-      for (const ctId of checklistTypeIds) {
-        await renumberChecklistItems(ctId);
-      }
 
       toast({
         title: "Sucesso",
@@ -518,7 +452,6 @@ const Admin = () => {
             <TabsTrigger value="inspection">🔬 Inspeção</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
             <TabsTrigger value="team">👥 Equipe</TabsTrigger>
-            <TabsTrigger value="rewards">🎁 Prêmios</TabsTrigger>
             <TabsTrigger value="checklists-items">📝 Checklists/Itens</TabsTrigger>
             {profile?.role === 'super_admin' && (
               <TabsTrigger value="my-stores">🏪 Minhas Lojas</TabsTrigger>
@@ -548,12 +481,8 @@ const Admin = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="team" className="space-y-4">
+          <TabsContent value="team">
             <TeamManagementTab />
-          </TabsContent>
-
-          <TabsContent value="rewards" className="space-y-4">
-            <RewardSettingsTab />
           </TabsContent>
 
           <TabsContent value="checklists-items">
@@ -576,7 +505,7 @@ const Admin = () => {
               onSetStagingConfirmOpen={setStagingConfirmOpen}
               onToggleItemSelection={toggleItemSelection}
               onToggleAllItems={toggleAllItems}
-              onFixAllOrder={handleFixAllOrder}
+              onDataChanged={loadData}
             />
           </TabsContent>
 
@@ -600,6 +529,7 @@ const Admin = () => {
         onOpenChange={setItemDialogOpen}
         item={selectedItem}
         checklists={checklists}
+        existingItems={items}
         onSuccess={loadData}
       />
 

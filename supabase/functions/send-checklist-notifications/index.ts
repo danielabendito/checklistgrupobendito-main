@@ -54,12 +54,11 @@ async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
     return false;
   }
 
-  const isGroup = phone.includes('@g.us');
-  const targetRecipient = isGroup ? phone : phone.replace(/\D/g, '');
+  const cleanNumber = phone.replace(/\D/g, '');
   const zapiUrl = `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}/send-text`;
 
   try {
-    console.log(`Sending WhatsApp to: ${targetRecipient}`);
+    console.log(`Sending WhatsApp to: ${cleanNumber}`);
     
     const response = await fetch(zapiUrl, {
       method: "POST",
@@ -68,7 +67,7 @@ async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
         "Client-Token": ZAPI_CLIENT_TOKEN || "",
       },
       body: JSON.stringify({
-        phone: targetRecipient,
+        phone: cleanNumber,
         message: message,
       }),
     });
@@ -157,11 +156,13 @@ const handler = async (req: Request): Promise<Response> => {
         continue;
       }
 
-      // Fetch checklist types for this store
+      // Fetch checklist types for this store (skip paused checklists — no
+      // one should be reminded to fill out something that's turned off)
       const { data: checklists, error: checklistsError } = await supabase
         .from("checklist_types")
         .select("id, nome, area, turno, store_id")
-        .eq("store_id", store.id);
+        .eq("store_id", store.id)
+        .eq("ativo", true);
 
       if (checklistsError || !checklists || checklists.length === 0) {
         console.log(`No checklists found for store ${store.nome}, skipping...`);
