@@ -10,6 +10,7 @@ import { StoreSelector } from "@/components/StoreSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UserStatsCard } from "@/components/UserStatsCard";
+import { getBrasiliaDateString } from "@/lib/utils";
 
 interface Profile {
   id: string;
@@ -34,6 +35,13 @@ const Dashboard = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [checklists, setChecklists] = useState<ChecklistType[]>([]);
+  const [completionStatuses, setCompletionStatuses] = useState<Record<string, {
+    total: number;
+    ok: number;
+    nok: number;
+    pendente: number;
+    completed: boolean;
+  }>>({});
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   const [showForceLogout, setShowForceLogout] = useState(false);
@@ -47,13 +55,13 @@ const Dashboard = () => {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
-      
+
       console.log("🔐 [DASHBOARD] Verificando sessão inicial:", session?.user?.id ? "Ativa" : "Não encontrada");
-      
+
       setSession(session);
       setUser(session?.user ?? null);
       setAuthChecked(true);
-      
+
       if (!session) {
         console.log("⚠️ [DASHBOARD] Sem sessão, redirecionando para /auth");
         setLoading(false);
@@ -67,13 +75,13 @@ const Dashboard = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (!isMounted) return;
-        
+
         console.log("🔄 [DASHBOARD] Auth state changed:", _event, session?.user?.id);
-        
+
         setSession(session);
         setUser(session?.user ?? null);
         setAuthChecked(true);
-        
+
         if (!session) {
           console.log("⚠️ [DASHBOARD] Sessão perdida, redirecionando para /auth");
           setLoading(false);
@@ -90,7 +98,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!authChecked) return;
-    
+
     if (!user) {
       setLoading(false);
       navigate("/auth");
@@ -102,7 +110,7 @@ const Dashboard = () => {
     const timer = setTimeout(() => {
       loadProfile();
     }, 500);
-    
+
     return () => clearTimeout(timer);
   }, [user, navigate, authChecked]);
 
@@ -181,19 +189,19 @@ const Dashboard = () => {
   const loadProfile = async (retryCount = 0) => {
     try {
       setLoading(true);
-      
+
       // CRÍTICO: Verificar se a sessão está ativa no Supabase
       const { data: { session: currentSession } } = await supabase.auth.getSession();
-      
+
       if (!currentSession) {
         console.error("❌ [PROFILE] Sessão não encontrada");
-        
+
         if (retryCount < 1) {
           console.log("⏳ [PROFILE] Aguardando 1000ms para sessão estabilizar...");
           await new Promise(resolve => setTimeout(resolve, 1000));
           return loadProfile(retryCount + 1);
         }
-        
+
         toast({
           title: "Erro de autenticação",
           description: "Sessão não encontrada. Por favor, faça login novamente.",
@@ -203,10 +211,10 @@ const Dashboard = () => {
         navigate('/auth');
         return;
       }
-      
+
       console.log("🔍 [PROFILE] Tentativa", retryCount + 1, "- User ID:", currentSession.user.id);
       console.log("🔑 [PROFILE] Sessão ativa confirmada");
-      
+
       // Load profile data usando o user.id da sessão confirmada
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
@@ -216,28 +224,28 @@ const Dashboard = () => {
 
       if (profileError) {
         console.error("❌ [PROFILE] Erro ao carregar:", profileError);
-        
+
         // Se for erro de permissão e ainda temos tentativas, retry
         if (profileError.code === 'PGRST116' && retryCount < 1) {
           console.log("⏳ [PROFILE] Aguardando 1000ms antes de retry...");
           await new Promise(resolve => setTimeout(resolve, 1000));
           return loadProfile(retryCount + 1);
         }
-        
+
         throw profileError;
       }
-      
+
       if (!profileData) {
         console.error("❌ [PROFILE] Perfil não retornado");
         console.log("🔍 [PROFILE] User ID usado na query:", currentSession.user.id);
-        
+
         // Retry se ainda temos tentativas
         if (retryCount < 1) {
           console.log("⏳ [PROFILE] Aguardando 1000ms antes de retry...");
           await new Promise(resolve => setTimeout(resolve, 1000));
           return loadProfile(retryCount + 1);
         }
-        
+
         toast({
           title: "Perfil não encontrado",
           description: "Por favor, entre em contato com o administrador.",
@@ -248,9 +256,9 @@ const Dashboard = () => {
         navigate('/auth');
         return;
       }
-      
+
       console.log("✅ [PROFILE] Perfil carregado:", profileData);
-      
+
       // Load user role from user_roles table with JOIN to roles table
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
@@ -269,22 +277,22 @@ const Dashboard = () => {
         console.error("❌ [PROFILE] Erro ao carregar role:", roleError);
         throw roleError;
       }
-      
+
       console.log("✅ [PROFILE] Role carregado:", roleData);
-      
+
       const profileWithRole = {
         ...profileData,
         role: roleData?.roles?.display_name || 'Usuário',
         role_id: roleData?.role_id,
         role_name: roleData?.roles?.name
       };
-      
+
       console.log("✅ [PROFILE] Profile final definido:", {
         role_id: profileWithRole.role_id,
         role_name: profileWithRole.role_name,
         store_id: profileWithRole.store_id
       });
-      
+
       setProfile(profileWithRole);
     } catch (error: any) {
       console.error("❌ [PROFILE] Erro fatal:", error);
@@ -299,7 +307,7 @@ const Dashboard = () => {
 
   const loadChecklists = async () => {
     if (!currentStore) return;
-    
+
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -318,14 +326,14 @@ const Dashboard = () => {
 
       // Admins and super_admins can see all checklists, others see only their allowed ones
       const filteredChecklists = (profile!.role_name === 'admin' || profile!.role_name === 'super_admin')
-        ? data 
+        ? data
         : data.filter((checklist) =>
             checklist.allowed_role_ids?.includes(profile!.role_id!)
           );
 
       console.log("🔍 [CHECKLISTS] Filtrando com role_id:", profile!.role_id);
       console.log("✅ [CHECKLISTS] Filtrados:", filteredChecklists.length, "de", data?.length);
-      
+
       if (filteredChecklists.length === 0) {
         console.warn("⚠️ [CHECKLISTS] Nenhum checklist encontrado para:", {
           role_id: profile!.role_id,
@@ -334,6 +342,11 @@ const Dashboard = () => {
       }
 
       setChecklists(filteredChecklists);
+
+      // Carregar status de completude para hoje
+      if (filteredChecklists.length > 0) {
+        await loadCompletionStatuses(filteredChecklists.map(c => c.id));
+      }
     } catch (error: any) {
       toast({
         title: "Erro ao carregar checklists",
@@ -342,6 +355,62 @@ const Dashboard = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCompletionStatuses = async (checklistIds: string[]) => {
+    if (!user || !currentStore || checklistIds.length === 0) return;
+
+    const today = getBrasiliaDateString();
+    try {
+      const [responsesResult, itemsResult] = await Promise.all([
+        supabase
+          .from("checklist_responses")
+          .select("checklist_type_id, checklist_item_id, status, completed_at")
+          .eq("store_id", currentStore.id)
+          .eq("data", today)
+          .in("checklist_type_id", checklistIds),
+        supabase
+          .from("checklist_items")
+          .select("id, checklist_type_id")
+          .in("checklist_type_id", checklistIds),
+      ]);
+
+      if (responsesResult.error || itemsResult.error) return;
+
+      const responses = responsesResult.data || [];
+      const items = itemsResult.data || [];
+
+      const statusMap: Record<string, {
+        total: number; ok: number; nok: number; pendente: number; completed: boolean;
+      }> = {};
+
+      checklistIds.forEach(id => {
+        const total = items.filter(i => i.checklist_type_id === id).length;
+        const allChecklistResponses = responses.filter(r => r.checklist_type_id === id);
+
+        // Deduplicate by checklist_item_id so multiple users answering the same item don't overcount
+        const uniqueMap = new Map();
+        allChecklistResponses.forEach(r => uniqueMap.set(r.checklist_item_id, r));
+        const checklistResponses = Array.from(uniqueMap.values());
+
+        const ok = checklistResponses.filter(r => r.status === 'ok').length;
+        const nok = checklistResponses.filter(r => r.status === 'nok').length;
+        const answered = ok + nok;
+        const completed = checklistResponses.some(r => r.completed_at !== null);
+
+        statusMap[id] = {
+          total,
+          ok,
+          nok,
+          pendente: Math.max(0, total - answered),
+          completed,
+        };
+      });
+
+      setCompletionStatuses(statusMap);
+    } catch (error) {
+      console.error("Erro ao carregar status de completude:", error);
     }
   };
 
@@ -404,7 +473,7 @@ const Dashboard = () => {
           {user && currentStore && (
             <UserStatsCard userId={user.id} storeId={currentStore.id} />
           )}
-          
+
           <div>
             <h2 className="text-2xl font-bold mb-2">Seus Checklists</h2>
             <p className="text-muted-foreground">
@@ -447,6 +516,7 @@ const Dashboard = () => {
                   nome={checklist.nome}
                   area={checklist.area}
                   turno={checklist.turno}
+                  completionStatus={completionStatuses[checklist.id]}
                 />
               ))}
             </div>

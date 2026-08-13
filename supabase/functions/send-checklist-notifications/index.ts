@@ -54,12 +54,13 @@ async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
     return false;
   }
 
-  const cleanNumber = phone.replace(/\D/g, '');
+  const isGroup = phone.includes('@g.us');
+  const targetRecipient = isGroup ? phone : phone.replace(/\D/g, '');
   const zapiUrl = `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}/send-text`;
 
   try {
-    console.log(`Sending WhatsApp to: ${cleanNumber}`);
-    
+    console.log(`Sending WhatsApp to: ${targetRecipient}`);
+
     const response = await fetch(zapiUrl, {
       method: "POST",
       headers: {
@@ -67,13 +68,13 @@ async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
         "Client-Token": ZAPI_CLIENT_TOKEN || "",
       },
       body: JSON.stringify({
-        phone: cleanNumber,
+        phone: targetRecipient,
         message: message,
       }),
     });
 
     const data = await response.json();
-    
+
     if (response.ok) {
       console.log("WhatsApp sent successfully:", data);
       return true;
@@ -101,7 +102,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { turno } = await req.json().catch(() => ({ turno: null }));
     const today = getBrasiliaDateString();
     const todayFormatted = getBrasiliaDateFormatted();
-    
+
     console.log("=== CHECKLIST NOTIFICATIONS ===");
     console.log(`Brasília date: ${today}`);
     console.log(`UTC time: ${new Date().toISOString()}`);
@@ -201,7 +202,7 @@ const handler = async (req: Request): Promise<Response> => {
       // Check each notification configuration
       for (const notification of relevantNotifications) {
         const checklist = checklists.find(c => c.id === notification.checklist_type_id);
-        
+
         if (!checklist) {
           console.error(`Checklist ${notification.checklist_type_id} not found in store ${store.nome}`);
           continue;
@@ -253,7 +254,7 @@ const handler = async (req: Request): Promise<Response> => {
           <h2>☀️ Manhã (${settings.notification_time_manha.substring(0, 5)})</h2>
           <ul>${manhaHtml}</ul>
         `;
-        
+
         whatsappMessage += `☀️ *Manhã:*\n`;
         uncompletedByTurno.manha.forEach(cl => {
           whatsappMessage += `• ${cl.nome} - ${cl.area}\n`;
@@ -269,7 +270,7 @@ const handler = async (req: Request): Promise<Response> => {
           <h2>🌤️ Tarde (${settings.notification_time_tarde.substring(0, 5)})</h2>
           <ul>${tardeHtml}</ul>
         `;
-        
+
         whatsappMessage += `🌤️ *Tarde:*\n`;
         uncompletedByTurno.tarde.forEach(cl => {
           whatsappMessage += `• ${cl.nome} - ${cl.area}\n`;
@@ -285,7 +286,7 @@ const handler = async (req: Request): Promise<Response> => {
           <h2>🌙 Noite (${settings.notification_time_noite.substring(0, 5)})</h2>
           <ul>${noiteHtml}</ul>
         `;
-        
+
         whatsappMessage += `🌙 *Noite:*\n`;
         uncompletedByTurno.noite.forEach(cl => {
           whatsappMessage += `• ${cl.nome} - ${cl.area}\n`;
@@ -298,7 +299,7 @@ const handler = async (req: Request): Promise<Response> => {
         <br>
         <p><em>Esta é uma notificação automática do sistema de checklists.</em></p>
       `;
-      
+
       whatsappMessage += `Por favor, verifique e tome as medidas necessárias.`;
 
       let emailSent = false;
@@ -313,7 +314,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         console.log(`Sending email to: ${settings.notification_email}`);
-        
+
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -329,7 +330,7 @@ const handler = async (req: Request): Promise<Response> => {
         });
 
         const emailData = await emailResponse.json();
-        
+
         if (emailResponse.ok) {
           console.log(`Email sent successfully for store ${store.nome}:`, emailData);
           totalEmailsSent++;

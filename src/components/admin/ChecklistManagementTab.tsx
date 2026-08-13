@@ -1,4 +1,4 @@
-import { Plus, Edit, Trash2, Upload, Download, Package } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download, Package, ListOrdered } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +61,9 @@ interface ChecklistManagementTabProps {
   onSetStagingConfirmOpen: (open: boolean) => void;
   onToggleItemSelection: (itemId: string) => void;
   onToggleAllItems: (checklistId: string) => void;
-  onDataChanged: () => void;
+  onFixAllOrder: () => void;
+  existingItems?: ChecklistItem[];
+  onDataChanged?: () => void;
 }
 
 export const ChecklistManagementTab = ({
@@ -83,6 +85,7 @@ export const ChecklistManagementTab = ({
   onSetStagingConfirmOpen,
   onToggleItemSelection,
   onToggleAllItems,
+  onFixAllOrder,
   onDataChanged,
 }: ChecklistManagementTabProps) => {
   const { currentStore } = useStore();
@@ -105,7 +108,7 @@ export const ChecklistManagementTab = ({
           : `"${checklist.nome}" não aparecerá mais para preenchimento até ser reativado.`,
       });
 
-      onDataChanged();
+      onDataChanged?.();
     } catch (error: any) {
       toast({
         title: "Erro ao alterar status do checklist",
@@ -145,13 +148,13 @@ export const ChecklistManagementTab = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {checklists.map((checklist) => (
-              <Card key={checklist.id} className={!checklist.ativo ? "opacity-70" : undefined}>
+              <Card key={checklist.id} className={checklist.ativo === false ? "opacity-70" : undefined}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
                         <CardTitle>{checklist.nome}</CardTitle>
-                        {!checklist.ativo && (
+                        {checklist.ativo === false && (
                           <Badge variant="secondary">Pausado</Badge>
                         )}
                       </div>
@@ -159,7 +162,12 @@ export const ChecklistManagementTab = ({
                         {checklist.area} - {checklist.turno}
                       </CardDescription>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={checklist.ativo !== false}
+                        onCheckedChange={() => handleToggleActive(checklist)}
+                        aria-label={checklist.ativo === false ? "Reativar checklist" : "Pausar checklist"}
+                      />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -192,16 +200,6 @@ export const ChecklistManagementTab = ({
                   <p className="text-sm text-muted-foreground mt-2">
                     {items.filter(i => i.checklist_type_id === checklist.id).length} itens
                   </p>
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <label htmlFor={`ativo-${checklist.id}`} className="text-sm font-medium cursor-pointer">
-                      {checklist.ativo ? "Ativo" : "Pausado"}
-                    </label>
-                    <Switch
-                      id={`ativo-${checklist.id}`}
-                      checked={checklist.ativo}
-                      onCheckedChange={() => handleToggleActive(checklist)}
-                    />
-                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -214,15 +212,15 @@ export const ChecklistManagementTab = ({
           <h2 className="text-2xl font-bold">Itens de Checklist</h2>
           <div className="flex gap-2">
             {selectedItems.size > 0 && (
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={() => onSetBulkDeleteDialogOpen(true)}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Excluir Selecionados ({selectedItems.size})
               </Button>
             )}
-            <Button 
+            <Button
               variant="outline"
               onClick={() => {
                 if (!currentStore) {
@@ -253,7 +251,7 @@ export const ChecklistManagementTab = ({
               <Download className="h-4 w-4 mr-2" />
               Exportar Checklists
             </Button>
-            <Button 
+            <Button
               variant="outline"
               onClick={() => onSetImportDialogOpen(true)}
             >
@@ -261,7 +259,7 @@ export const ChecklistManagementTab = ({
               Importar Planilha
             </Button>
             {stagingCount > 0 && (
-              <Button 
+              <Button
                 variant="secondary"
                 onClick={() => onSetStagingConfirmOpen(true)}
               >
@@ -269,6 +267,14 @@ export const ChecklistManagementTab = ({
                 Revisar Importação ({stagingCount})
               </Button>
             )}
+            <Button
+              variant="outline"
+              onClick={() => onFixAllOrder()}
+              disabled={items.length === 0}
+            >
+              <ListOrdered className="h-4 w-4 mr-2" />
+              Reorganizar Numeração
+            </Button>
             <Button onClick={() => {
               onSetSelectedItem(null);
               onSetItemDialogOpen(true);
@@ -288,16 +294,16 @@ export const ChecklistManagementTab = ({
             </CardContent>
           </Card>
         ) : (
-          <Accordion 
-            type="multiple" 
-            defaultValue={checklists.length > 0 ? [checklists[0].id] : []} 
+          <Accordion
+            type="multiple"
+            defaultValue={checklists.length > 0 ? [checklists[0].id] : []}
             className="space-y-4"
           >
             {checklists.map((checklist) => {
               const checklistItems = items.filter(
                 (item) => item.checklist_type_id === checklist.id
               );
-              
+
               if (checklistItems.length === 0) return null;
 
               const allChecklistItemsSelected = checklistItems.every(item => selectedItems.has(item.id));
@@ -305,8 +311,8 @@ export const ChecklistManagementTab = ({
               const selectedCount = checklistItems.filter(item => selectedItems.has(item.id)).length;
 
               return (
-                <AccordionItem 
-                  key={checklist.id} 
+                <AccordionItem
+                  key={checklist.id}
                   value={checklist.id}
                   className="border rounded-lg bg-card shadow-sm"
                 >
