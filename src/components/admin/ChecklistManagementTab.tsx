@@ -1,4 +1,4 @@
-import { Plus, Edit, Trash2, Upload, Download, Package, ListOrdered } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download, Package, ListOrdered, GripVertical, Camera, MessageSquare } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,23 @@ import { useStore } from "@/contexts/StoreContext";
 import { supabase } from "@/integrations/supabase/client";
 import { exportChecklistsToExcel } from "@/lib/exportUtils";
 import type { Database } from "@/integrations/supabase/types";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type ChecklistArea = Database["public"]["Enums"]["checklist_area"];
 type ShiftType = Database["public"]["Enums"]["shift_type"];
@@ -62,9 +79,74 @@ interface ChecklistManagementTabProps {
   onToggleItemSelection: (itemId: string) => void;
   onToggleAllItems: (checklistId: string) => void;
   onFixAllOrder: () => void;
+  onReorderItems: (checklistTypeId: string, orderedItemIds: string[]) => void;
   existingItems?: ChecklistItem[];
   onDataChanged?: () => void;
 }
+
+const SortableItemRow = ({
+  item,
+  selected,
+  onToggleSelection,
+  onEdit,
+  onDelete,
+}: {
+  item: ChecklistItem;
+  selected: boolean;
+  onToggleSelection: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors ${
+        isDragging ? "bg-muted shadow-md z-10" : ""
+      }`}
+    >
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+        aria-label="Arrastar para reordenar"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <Checkbox checked={selected} onCheckedChange={onToggleSelection} />
+      <span className="text-sm font-medium text-muted-foreground w-8">{item.ordem}</span>
+      <span className="text-sm flex-1">{item.nome}</span>
+      {item.requer_foto && (
+        <Badge variant="outline" className="gap-1 text-xs font-normal">
+          <Camera className="h-3 w-3" /> foto
+        </Badge>
+      )}
+      {item.requer_observacao && (
+        <Badge variant="outline" className="gap-1 text-xs font-normal">
+          <MessageSquare className="h-3 w-3" /> obs
+        </Badge>
+      )}
+      <div className="flex gap-1">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
+          <Edit className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}>
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 export const ChecklistManagementTab = ({
   checklists,
@@ -86,10 +168,16 @@ export const ChecklistManagementTab = ({
   onToggleItemSelection,
   onToggleAllItems,
   onFixAllOrder,
+  onReorderItems,
   onDataChanged,
 }: ChecklistManagementTabProps) => {
   const { currentStore } = useStore();
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const handleToggleActive = async (checklist: ChecklistType) => {
     const nextAtivo = !checklist.ativo;
@@ -116,6 +204,18 @@ export const ChecklistManagementTab = ({
         variant: "destructive",
       });
     }
+  };
+
+  const handleDragEnd = (checklistId: string, checklistItems: ChecklistItem[]) => (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = checklistItems.findIndex((i) => i.id === active.id);
+    const newIndex = checklistItems.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(checklistItems, oldIndex, newIndex);
+    onReorderItems(checklistId, reordered.map((i) => i.id));
   };
 
   return (
@@ -300,9 +400,9 @@ export const ChecklistManagementTab = ({
             className="space-y-4"
           >
             {checklists.map((checklist) => {
-              const checklistItems = items.filter(
-                (item) => item.checklist_type_id === checklist.id
-              );
+              const checklistItems = items
+                .filter((item) => item.checklist_type_id === checklist.id)
+                .sort((a, b) => a.ordem - b.ordem);
 
               if (checklistItems.length === 0) return null;
 
@@ -335,7 +435,7 @@ export const ChecklistManagementTab = ({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <Badge variant="secondary">
                           {checklistItems.length} {checklistItems.length === 1 ? 'item' : 'itens'}
                         </Badge>
@@ -348,47 +448,35 @@ export const ChecklistManagementTab = ({
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-6 pb-4">
-                    <div className="space-y-2 pt-2">
-                      {checklistItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group transition-colors"
-                        >
-                          <Checkbox
-                            checked={selectedItems.has(item.id)}
-                            onCheckedChange={() => onToggleItemSelection(item.id)}
-                          />
-                          <span className="text-sm font-medium text-muted-foreground w-8">
-                            {item.ordem}
-                          </span>
-                          <span className="text-sm flex-1">{item.nome}</span>
-                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => {
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd(checklist.id, checklistItems)}
+                    >
+                      <SortableContext
+                        items={checklistItems.map((i) => i.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-1 pt-2">
+                          {checklistItems.map((item) => (
+                            <SortableItemRow
+                              key={item.id}
+                              item={item}
+                              selected={selectedItems.has(item.id)}
+                              onToggleSelection={() => onToggleItemSelection(item.id)}
+                              onEdit={() => {
                                 onSetSelectedItem(item);
                                 onSetItemDialogOpen(true);
                               }}
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => {
+                              onDelete={() => {
                                 onSetItemToDelete({ id: item.id, type: 'item' });
                                 onSetDeleteDialogOpen(true);
                               }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
+                            />
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </SortableContext>
+                    </DndContext>
                   </AccordionContent>
                 </AccordionItem>
               );

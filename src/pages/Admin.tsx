@@ -331,6 +331,37 @@ const Admin = () => {
     }
   };
 
+  const handleReorderItems = async (checklistTypeId: string, orderedItemIds: string[]) => {
+    if (!currentStore) return;
+
+    // Optimistic local update so the drag feels instant.
+    const orderMap = new Map(orderedItemIds.map((id, index) => [id, index + 1]));
+    setItems((prev) =>
+      prev.map((item) =>
+        orderMap.has(item.id) ? { ...item, ordem: orderMap.get(item.id)! } : item
+      )
+    );
+
+    try {
+      await Promise.all(
+        orderedItemIds.map((id, index) =>
+          supabase
+            .from("checklist_items")
+            .update({ ordem: index + 1 })
+            .eq("id", id)
+            .eq("store_id", currentStore.id)
+        )
+      );
+    } catch (error: any) {
+      toast({
+        title: "Erro ao reordenar itens",
+        description: error.message,
+        variant: "destructive",
+      });
+      loadData();
+    }
+  };
+
   const handleFixAllOrder = async () => {
     if (!currentStore || checklists.length === 0) return;
     setLoading(true);
@@ -578,6 +609,7 @@ const Admin = () => {
               onToggleItemSelection={toggleItemSelection}
               onToggleAllItems={toggleAllItems}
               onFixAllOrder={handleFixAllOrder}
+              onReorderItems={handleReorderItems}
               existingItems={items}
               onDataChanged={loadData}
             />
