@@ -63,6 +63,31 @@ const DEFAULT_TIMES: Record<string, string> = {
   noite: "22:00:00",
 };
 
+const SAO_PAULO_TZ = "America/Sao_Paulo";
+
+// Today's date as YYYY-MM-DD in São Paulo time, regardless of the viewer's device timezone.
+function getSaoPauloDateString(): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: SAO_PAULO_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+// Minutes since midnight, in São Paulo time, regardless of the viewer's device timezone.
+function getSaoPauloMinutesNow(): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SAO_PAULO_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return h * 60 + m;
+}
+
 export function DashboardTab() {
   const { currentStore } = useStore();
   const [startDate, setStartDate] = useState<Date | undefined>(subDays(new Date(), 7));
@@ -93,7 +118,7 @@ export function DashboardTab() {
     if (!currentStore) return;
 
     try {
-      const todayStr = format(new Date(), "yyyy-MM-dd");
+      const todayStr = getSaoPauloDateString();
 
       const [checklistTypesRes, settingsRes, responsesRes] = await Promise.all([
         supabase
@@ -126,14 +151,13 @@ export function DashboardTab() {
         noite: settingsRes.data?.notification_time_noite || DEFAULT_TIMES.noite,
       };
 
-      const now = new Date();
+      const nowMinutes = getSaoPauloMinutesNow();
 
       const cards: TodayCard[] = (checklistTypesRes.data || []).map((ct) => {
         const isCompleted = completedTypeIds.has(ct.id);
         const thresholdStr = times[ct.turno] || "23:59:00";
         const [h, m] = thresholdStr.split(":").map(Number);
-        const threshold = new Date();
-        threshold.setHours(h, m, 0, 0);
+        const thresholdMinutes = h * 60 + m;
 
         let status: TodayStatus;
         let statusLabel: string;
@@ -141,10 +165,10 @@ export function DashboardTab() {
         if (isCompleted) {
           status = "ok";
           statusLabel = "Concluído";
-        } else if (now > threshold) {
+        } else if (nowMinutes > thresholdMinutes) {
           status = "late";
-          const diffMs = now.getTime() - threshold.getTime();
-          const diffH = Math.max(1, Math.round(diffMs / 3600000));
+          const diffMinutes = nowMinutes - thresholdMinutes;
+          const diffH = Math.max(1, Math.round(diffMinutes / 60));
           statusLabel = `Atrasado ${diffH}h`;
         } else {
           status = "pending";
