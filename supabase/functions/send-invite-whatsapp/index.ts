@@ -108,7 +108,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Gerar URL de convite
-    const inviteUrl = `https://checklistgrupobendito.lovable.app/auth?invite=${invite_id}`;
+    const inviteUrl = `https://checklist.grupobenditopb.com.br/auth?invite=${invite_id}`;
     const roleDisplay = roleDisplayNames[role] || role;
 
     // Limpar número de WhatsApp (ou manter ID de grupo)

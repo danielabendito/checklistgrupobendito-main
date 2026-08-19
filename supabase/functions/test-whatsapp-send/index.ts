@@ -37,10 +37,10 @@ serve(async (req) => {
 
 _Esta é uma mensagem de teste do Inspetor Sanitário Virtual._`;
 
-    console.log(`📤 Enviando teste para ${targetRecipient} via Z-API`);
+    console.log(`📤 Enviando teste para ${cleanedNumber} via Z-API`);
 
     const zapiUrl = `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}/send-text`;
-    
+
     const ZAPI_CLIENT_TOKEN = Deno.env.get('ZAPI_CLIENT_TOKEN');
 
     const response = await fetch(zapiUrl, {
@@ -50,7 +50,7 @@ _Esta é uma mensagem de teste do Inspetor Sanitário Virtual._`;
         'Client-Token': ZAPI_CLIENT_TOKEN || '',
       },
       body: JSON.stringify({
-        phone: targetRecipient,
+        phone: cleanedNumber,
         message: message,
       }),
     });
@@ -65,10 +65,10 @@ _Esta é uma mensagem de teste do Inspetor Sanitário Virtual._`;
     console.log('✅ Mensagem de teste enviada:', result);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message_id: result.messageId || result.zapiMessageId,
-        to: targetRecipient 
+        to: cleanedNumber
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

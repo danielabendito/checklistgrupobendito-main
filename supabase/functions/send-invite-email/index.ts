@@ -124,7 +124,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("✅ [DATABASE] Loja encontrada:", store.nome);
     const storeName = store?.nome || "Sistema de Checklists";
-    const signupUrl = `https://checklistgrupobendito.lovable.app/auth?invite=${invite_id}`;
+    const signupUrl = `https://checklist.grupobenditopb.com.br/auth?invite=${invite_id}`;
 
     // Build email HTML
     const emailHtml = `
