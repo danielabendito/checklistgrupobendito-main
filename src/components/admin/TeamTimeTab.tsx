@@ -39,6 +39,16 @@ interface ChecklistAverage {
   count: number;
 }
 
+// Always show times in São Paulo/Brazil time, regardless of the viewer's device timezone
+// (same fix applied to DashboardTab's "Agora" section).
+function formatTimeSaoPaulo(date: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function formatDuration(minutes: number): string {
   if (minutes < 1) return "< 1 min";
   if (minutes < 60) return `${Math.round(minutes)} min`;
@@ -311,10 +321,11 @@ export function TeamTimeTab({ currentStore }: TeamTimeTabProps) {
                       <div>
                         <p className="text-sm font-medium">{e.checklistNome}</p>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(e.data + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                          {format(new Date(e.data + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })} ·{" "}
+                          {formatTimeSaoPaulo(e.startedAt)} – {formatTimeSaoPaulo(e.finishedAt)}
                         </p>
                       </div>
-                      <span className="text-sm font-semibold flex items-center gap-1.5">
+                      <span className="text-sm font-semibold flex items-center gap-1.5 shrink-0 ml-3">
                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                         {formatDuration(e.durationMinutes)}
                       </span>
